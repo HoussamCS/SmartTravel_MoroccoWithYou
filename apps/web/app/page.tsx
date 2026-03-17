@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 const features = [
   {
     title: "Experiences locales",
@@ -32,12 +34,18 @@ export default function HomePage() {
             Une plateforme unique pour decouvrir, reserver et construire des aventures memorables a Marrakech, Fes, Agadir et au-dela.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <button className="rounded-full bg-warm px-5 py-3 text-sm font-semibold text-white transition hover:scale-[1.02]">
+            <Link
+              href="/special-request"
+              className="rounded-full bg-warm px-5 py-3 text-sm font-semibold text-white transition hover:scale-[1.02]"
+            >
               Explorer les experiences
-            </button>
-            <button className="rounded-full border border-atlas px-5 py-3 text-sm font-semibold text-atlas transition hover:bg-atlas hover:text-white">
+            </Link>
+            <Link
+              href="/special-request"
+              className="rounded-full border border-atlas px-5 py-3 text-sm font-semibold text-atlas transition hover:bg-atlas hover:text-white"
+            >
               Demander un travel planner
-            </button>
+            </Link>
           </div>
         </div>
       </section>
