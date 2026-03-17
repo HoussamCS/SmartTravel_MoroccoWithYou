@@ -2,10 +2,16 @@
   "name": "@smarttravel/shared",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
-    "build": "echo \"shared build\"",
-    "lint": "echo \"shared lint\"",
-    "typecheck": "echo \"shared typecheck\"",
+    "build": "tsc -p tsconfig.json",
+    "lint": "echo \"shared lint pending\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "format": "echo \"shared format\""
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
   }
 }
