@@ -1,0 +1,155 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  TRAVELER
+  ADMIN
+}
+
+enum ProviderCategory {
+  RESTAURANT
+  ACTIVITY
+  TRANSPORT
+  ACCOM
+  EXCURSION
+}
+
+enum ServiceUnit {
+  PER_PERSON
+  FLAT
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+enum ItineraryStatus {
+  DRAFT
+  SENT
+  VALIDATED
+  BOOKED
+}
+
+model User {
+  id             String          @id @default(uuid()) @db.Uuid
+  email          String          @unique
+  password       String
+  role           Role            @default(TRAVELER)
+  profile        Json?
+  bookings       Booking[]
+  itineraries    Itinerary[]
+  groupTripJoins GroupTripJoin[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+model Provider {
+  id          String           @id @default(uuid()) @db.Uuid
+  name        String
+  city        String
+  category    ProviderCategory
+  description String
+  location    Json
+  photos      String[]
+  isActive    Boolean          @default(true)
+  services    Service[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model Service {
+  id               String      @id @default(uuid()) @db.Uuid
+  providerId       String      @db.Uuid
+  provider         Provider    @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  label            String
+  pricePublic      Decimal     @db.Decimal(10, 2)
+  commissionAmount Decimal     @db.Decimal(10, 2)
+  unit             ServiceUnit
+  bookings         Booking[]
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  @@index([providerId])
+}
+
+model Booking {
+  id              String        @id @default(uuid()) @db.Uuid
+  userId          String        @db.Uuid
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  serviceId       String        @db.Uuid
+  service         Service       @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  date            DateTime      @db.Date
+  pax             Int
+  status          BookingStatus @default(PENDING)
+  totalPrice      Decimal       @db.Decimal(10, 2)
+  commissionTotal Decimal       @db.Decimal(10, 2)
+  paymentIntent   String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([userId])
+  @@index([serviceId])
+}
+
+model Itinerary {
+  id         String          @id @default(uuid()) @db.Uuid
+  userId     String          @db.Uuid
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title      String
+  status     ItineraryStatus @default(DRAFT)
+  days       Json
+  totalPrice Decimal         @db.Decimal(10, 2)
+  intakeForm Json
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  @@index([userId])
+}
+
+model GroupTrip {
+  id             String          @id @default(uuid()) @db.Uuid
+  title          String
+  destination    String
+  startDate      DateTime        @db.Date
+  endDate        DateTime        @db.Date
+  maxCapacity    Int
+  program        Json
+  pricePerPerson Decimal         @db.Decimal(10, 2)
+  joins          GroupTripJoin[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+model GroupTripJoin {
+  id          String    @id @default(uuid()) @db.Uuid
+  groupTripId String    @db.Uuid
+  groupTrip   GroupTrip @relation(fields: [groupTripId], references: [id], onDelete: Cascade)
+  userId      String    @db.Uuid
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pax         Int       @default(1)
+  totalPrice  Decimal   @db.Decimal(10, 2)
+  createdAt   DateTime  @default(now())
+
+  @@index([groupTripId])
+  @@index([userId])
+}
+
+model EventRequest {
+  id            String   @id @default(uuid()) @db.Uuid
+  eventType     String
+  date          DateTime @db.Date
+  budget        Decimal? @db.Decimal(10, 2)
+  peopleCount   Int
+  message       String
+  requesterName String?
+  requesterMail String?
+  createdAt     DateTime @default(now())
+}

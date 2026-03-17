@@ -2,10 +2,22 @@
   "name": "@smarttravel/db",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
-    "build": "echo \"db build\"",
-    "lint": "echo \"db lint\"",
-    "typecheck": "echo \"db typecheck\"",
-    "format": "echo \"db format\""
+    "build": "tsc -p tsconfig.json",
+    "lint": "echo \"db lint pending\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "format": "prisma format",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.21.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "prisma": "^5.21.1"
   }
 }
