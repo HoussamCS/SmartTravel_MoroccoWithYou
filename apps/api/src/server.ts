@@ -807,6 +807,117 @@ app.post("/api/v1/admin/commissions/report", async (request, reply) => {
   return reply.code(202).send({ queued: true, jobId: job.id });
 });
 
+app.post("/api/v1/admin/commissions/report/schedule", async (request, reply) => {
+  let claims: AuthClaims;
+  try {
+    claims = requireAuth(request);
+    requireRole(claims, "ADMIN");
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
+    return reply.code(statusCode).send({ message: (error as Error).message });
+  }
+
+  const body = z
+    .object({
+      providerId: z.string().uuid().optional()
+    })
+    .parse(request.body);
+
+  const now = new Date();
+  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 5, 0));
+  const delay = Math.max(next.getTime() - now.getTime(), 1);
+  const month = `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}`;
+
+  const job = await commissionReportQueue.add(
+    "monthly-commission-report",
+    {
+      providerId: body.providerId,
+      month
+    },
+    { delay, attempts: 3, backoff: { type: "exponential", delay: 3000 } }
+  );
+
+  return reply.code(202).send({ queued: true, jobId: job.id, scheduledFor: next.toISOString() });
+});
+
+app.get("/api/v1/admin/jobs/logs", async (request, reply) => {
+  let claims: AuthClaims;
+  try {
+    claims = requireAuth(request);
+    requireRole(claims, "ADMIN");
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
+    return reply.code(statusCode).send({ message: (error as Error).message });
+  }
+
+  const query = z
+    .object({
+      queueName: z.string().optional(),
+      limit: z.coerce.number().int().positive().max(100).default(25)
+    })
+    .parse(request.query);
+
+  const logs = await prisma.jobExecutionLog.findMany({
+    where: query.queueName ? { queueName: query.queueName } : undefined,
+    orderBy: { processedAt: "desc" },
+    take: query.limit
+  });
+
+  return logs;
+});
+
+app.post("/api/v1/event-requests", async (request, reply) => {
+  const body = z
+    .object({
+      eventType: z.string().min(2),
+      date: z.string(),
+      budget: z.number().positive().optional(),
+      peopleCount: z.number().int().positive(),
+      message: z.string().min(5),
+      requesterName: z.string().optional(),
+      requesterMail: z.string().email().optional()
+    })
+    .parse(request.body);
+
+  const eventRequest = await prisma.eventRequest.create({
+    data: {
+      eventType: body.eventType,
+      date: new Date(body.date),
+      budget: body.budget,
+      peopleCount: body.peopleCount,
+      message: body.message,
+      requesterName: body.requesterName,
+      requesterMail: body.requesterMail
+    }
+  });
+
+  return reply.code(201).send({
+    ...eventRequest,
+    budget: eventRequest.budget ? toNumber(eventRequest.budget) : null
+  });
+});
+
+app.get("/api/v1/admin/event-requests", async (request, reply) => {
+  let claims: AuthClaims;
+  try {
+    claims = requireAuth(request);
+    requireRole(claims, "ADMIN");
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
+    return reply.code(statusCode).send({ message: (error as Error).message });
+  }
+
+  const rows = await prisma.eventRequest.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 100
+  });
+
+  return rows.map((row) => ({
+    ...row,
+    budget: row.budget ? toNumber(row.budget) : null
+  }));
+});
+
 const start = async () => {
   try {
     await app.listen({ port: 4000, host: "0.0.0.0" });

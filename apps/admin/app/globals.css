@@ -96,6 +96,29 @@ body {
   padding: 12px;
 }
 
+.table-wrap {
+  overflow: auto;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.admin-table th,
+.admin-table td {
+  text-align: left;
+  border-bottom: 1px solid #e8ecf7;
+  padding: 10px 8px;
+  vertical-align: top;
+}
+
+.admin-table th {
+  color: #59627a;
+  font-weight: 700;
+}
+
 button.danger {
   margin-top: 10px;
   height: 36px;

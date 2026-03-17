@@ -2,9 +2,9 @@ import Link from "next/link";
 
 const cards = [
   { title: "Prestataires", metric: "CRUD", hint: "gestion catalogue", href: "/providers" },
-  { title: "Reservations", metric: "Paiement", hint: "status webhook stripe", href: "/providers" },
-  { title: "Commissions", metric: "Rapports", hint: "jobs BullMQ", href: "/providers" },
-  { title: "Voyages de groupe", metric: "Capacite", hint: "inscriptions en temps reel", href: "/providers" }
+  { title: "Reservations", metric: "Paiement", hint: "status webhook stripe", href: "/commissions" },
+  { title: "Commissions", metric: "Rapports", hint: "jobs BullMQ", href: "/commissions" },
+  { title: "Demandes Speciales", metric: "Inbox", hint: "event requests", href: "/event-requests" }
 ];
 
 export default function AdminPage() {

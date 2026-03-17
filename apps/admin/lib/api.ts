@@ -12,6 +12,33 @@ export type ProviderItem = {
   isActive: boolean;
 };
 
+export type CommissionRow = {
+  providerId: string;
+  providerName: string;
+  commissionTotal: number;
+};
+
+export type JobLogRow = {
+  id: string;
+  queueName: string;
+  jobName: string;
+  status: string;
+  processedAt: string;
+  error?: string | null;
+};
+
+export type EventRequestRow = {
+  id: string;
+  eventType: string;
+  date: string;
+  budget: number | null;
+  peopleCount: number;
+  message: string;
+  requesterName?: string | null;
+  requesterMail?: string | null;
+  createdAt: string;
+};
+
 export const fetchProviders = async (): Promise<ProviderItem[]> => {
   const response = await fetch(`${ADMIN_API_BASE}/providers?page=1&pageSize=100`, {
     cache: "no-store"
@@ -23,4 +50,47 @@ export const fetchProviders = async (): Promise<ProviderItem[]> => {
 
   const payload = (await response.json()) as { data?: ProviderItem[] };
   return payload.data ?? [];
+};
+
+const getHeaders = () => ({
+  authorization: `Bearer ${process.env.ADMIN_BOOTSTRAP_TOKEN ?? ""}`
+});
+
+export const fetchCommissions = async (): Promise<CommissionRow[]> => {
+  const response = await fetch(`${ADMIN_API_BASE}/admin/commissions`, {
+    cache: "no-store",
+    headers: getHeaders()
+  });
+
+  if (!response.ok) {
+    return [];
+  }
+
+  return (await response.json()) as CommissionRow[];
+};
+
+export const fetchJobLogs = async (): Promise<JobLogRow[]> => {
+  const response = await fetch(`${ADMIN_API_BASE}/admin/jobs/logs?limit=30`, {
+    cache: "no-store",
+    headers: getHeaders()
+  });
+
+  if (!response.ok) {
+    return [];
+  }
+
+  return (await response.json()) as JobLogRow[];
+};
+
+export const fetchEventRequests = async (): Promise<EventRequestRow[]> => {
+  const response = await fetch(`${ADMIN_API_BASE}/admin/event-requests`, {
+    cache: "no-store",
+    headers: getHeaders()
+  });
+
+  if (!response.ok) {
+    return [];
+  }
+
+  return (await response.json()) as EventRequestRow[];
 };

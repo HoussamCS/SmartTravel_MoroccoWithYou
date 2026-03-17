@@ -25,6 +25,19 @@ const bookingWorker = new Worker<BookingEmailJob, void, BookingEmailJobName>(
     console.log(
       `[worker] ${job.data.emailType} -> ${booking.user.email} for booking ${booking.id} (${booking.service.provider.name})`
     );
+
+    await prisma.jobExecutionLog.create({
+      data: {
+        queueName: BOOKING_EMAIL_QUEUE,
+        jobName: job.name,
+        status: "SUCCESS",
+        payload: job.data,
+        result: {
+          bookingId: booking.id,
+          recipient: booking.user.email
+        }
+      }
+    });
   },
   { connection: redisConnection }
 );
@@ -65,16 +78,59 @@ const commissionWorker = new Worker<CommissionReportJob, void, CommissionReportJ
     console.log(
       `[worker] commission report month=${month} provider=${job.data.providerId ?? "ALL"} bookings=${bookings.length} total=${totalCommission}`
     );
+
+    await prisma.jobExecutionLog.create({
+      data: {
+        queueName: COMMISSION_REPORT_QUEUE,
+        jobName: job.name,
+        status: "SUCCESS",
+        payload: job.data,
+        result: {
+          bookings: bookings.length,
+          totalCommission
+        }
+      }
+    });
   },
   { connection: redisConnection }
 );
 
 bookingWorker.on("failed", (job, error) => {
   console.error(`[worker] booking job failed ${job?.id}:`, error.message);
+  if (!job) {
+    return;
+  }
+
+  prisma.jobExecutionLog
+    .create({
+      data: {
+        queueName: BOOKING_EMAIL_QUEUE,
+        jobName: job.name,
+        status: "FAILED",
+        payload: job.data,
+        error: error.message
+      }
+    })
+    .catch(() => undefined);
 });
 
 commissionWorker.on("failed", (job, error) => {
   console.error(`[worker] commission job failed ${job?.id}:`, error.message);
+  if (!job) {
+    return;
+  }
+
+  prisma.jobExecutionLog
+    .create({
+      data: {
+        queueName: COMMISSION_REPORT_QUEUE,
+        jobName: job.name,
+        status: "FAILED",
+        payload: job.data,
+        error: error.message
+      }
+    })
+    .catch(() => undefined);
 });
 
 process.on("SIGINT", async () => {
