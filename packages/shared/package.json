@@ -1,0 +1,11 @@
+{
+  "name": "@smarttravel/shared",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "echo \"shared build\"",
+    "lint": "echo \"shared lint\"",
+    "typecheck": "echo \"shared typecheck\"",
+    "format": "echo \"shared format\""
+  }
+}

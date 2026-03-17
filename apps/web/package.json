@@ -1,0 +1,12 @@
+{
+  "name": "@smarttravel/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo \"Web app scaffolded\"",
+    "build": "echo \"Web build\"",
+    "lint": "echo \"Web lint\"",
+    "typecheck": "echo \"Web typecheck\"",
+    "format": "echo \"Web format\""
+  }
+}

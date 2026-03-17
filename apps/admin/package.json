@@ -1,0 +1,12 @@
+{
+  "name": "@smarttravel/admin",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo \"Admin app scaffolded\"",
+    "build": "echo \"Admin build\"",
+    "lint": "echo \"Admin lint\"",
+    "typecheck": "echo \"Admin typecheck\"",
+    "format": "echo \"Admin format\""
+  }
+}

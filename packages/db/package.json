@@ -1,0 +1,11 @@
+{
+  "name": "@smarttravel/db",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "echo \"db build\"",
+    "lint": "echo \"db lint\"",
+    "typecheck": "echo \"db typecheck\"",
+    "format": "echo \"db format\""
+  }
+}
