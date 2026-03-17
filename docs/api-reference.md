@@ -35,6 +35,14 @@ Base URL: `/api/v1`
 
 - `POST /admin/providers`: create provider (auth required)
 - `GET /admin/commissions`: grouped commission report (auth required)
+- `POST /admin/commissions/report`: enqueue monthly commission report job
+- `POST /admin/commissions/report/schedule`: schedule next monthly commission job
+- `GET /admin/jobs/logs`: list worker execution logs
+- `GET /admin/event-requests`: list event requests
+
+## Event Requests
+
+- `POST /event-requests`: submit special event request
 
 ## Payments
 
