@@ -10,6 +10,7 @@ import fastifyRawBody from "fastify-raw-body";
 import jwt, { type JwtPayload } from "jsonwebtoken";
 import Stripe from "stripe";
 import { z } from "zod";
+import { bookingEmailQueue, commissionReportQueue } from "./jobs/queues.js";
 
 const env = appEnvSchema.parse(process.env);
 
@@ -433,10 +434,25 @@ app.post("/api/v1/stripe/webhook", async (request, reply) => {
 
   if (event.type === "payment_intent.succeeded") {
     const intent = event.data.object as Stripe.PaymentIntent;
-    await prisma.booking.updateMany({
+    const update = await prisma.booking.updateMany({
       where: { paymentIntent: intent.id },
       data: { status: "CONFIRMED" }
     });
+
+    if (update.count > 0) {
+      const booking = await prisma.booking.findFirst({ where: { paymentIntent: intent.id } });
+      if (booking) {
+        await bookingEmailQueue.add(
+          "booking-confirmed-email",
+          {
+            bookingId: booking.id,
+            userId: booking.userId,
+            emailType: "BOOKING_CONFIRMED"
+          },
+          { attempts: 3, backoff: { type: "exponential", delay: 2000 } }
+        );
+      }
+    }
   }
 
   if (event.type === "payment_intent.payment_failed") {
@@ -739,6 +755,35 @@ app.get("/api/v1/admin/commissions", async (request, reply) => {
   );
 
   return Object.values(grouped);
+});
+
+app.post("/api/v1/admin/commissions/report", async (request, reply) => {
+  let claims: AuthClaims;
+  try {
+    claims = requireAuth(request);
+    requireRole(claims, "ADMIN");
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
+    return reply.code(statusCode).send({ message: (error as Error).message });
+  }
+
+  const body = z
+    .object({
+      providerId: z.string().uuid().optional(),
+      month: z.string().regex(/^\d{4}-\d{2}$/)
+    })
+    .parse(request.body);
+
+  const job = await commissionReportQueue.add(
+    "monthly-commission-report",
+    {
+      providerId: body.providerId,
+      month: body.month
+    },
+    { attempts: 3, backoff: { type: "exponential", delay: 3000 } }
+  );
+
+  return reply.code(202).send({ queued: true, jobId: job.id });
 });
 
 const start = async () => {

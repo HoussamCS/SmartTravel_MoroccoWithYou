@@ -8,8 +8,10 @@
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
+    "dev:worker": "tsx watch src/workers/jobs.worker.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
+    "start:worker": "node dist/workers/jobs.worker.js",
     "lint": "echo \"api lint pending\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "format": "echo \"API format\"",
@@ -23,6 +25,7 @@
     "@smarttravel/db": "0.1.0",
     "@smarttravel/shared": "0.1.0",
     "bcryptjs": "^2.4.3",
+    "bullmq": "^5.16.1",
     "fastify": "^5.1.0",
     "fastify-raw-body": "^5.0.0",
     "jsonwebtoken": "^9.0.2",
