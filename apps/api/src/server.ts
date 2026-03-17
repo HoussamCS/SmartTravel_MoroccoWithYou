@@ -1,29 +1,121 @@
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
-import jwt from "@fastify/jwt";
 import rateLimit from "@fastify/rate-limit";
+import { Prisma } from "@prisma/client";
+import { prisma } from "@smarttravel/db";
+import { appEnvSchema, providerFiltersSchema, roleSchema } from "@smarttravel/shared";
+import bcrypt from "bcryptjs";
 import Fastify from "fastify";
+import fastifyRawBody from "fastify-raw-body";
+import jwt, { type JwtPayload } from "jsonwebtoken";
+import Stripe from "stripe";
 import { z } from "zod";
-import { appEnvSchema, providerFiltersSchema } from "@smarttravel/shared";
-import { groupTrips, itineraries, providers, services } from "./seed.js";
-import type { Booking, GroupTrip, Itinerary } from "./types.js";
 
 const env = appEnvSchema.parse(process.env);
 
 const app = Fastify({ logger: true });
-const bookings = new Map<string, Booking>();
-const itineraryStore = new Map<string, Itinerary>(itineraries.map((item) => [item.id, item]));
-const groupTripStore = new Map<string, GroupTrip>(groupTrips.map((item) => [item.id, item]));
+const stripe = new Stripe(env.STRIPE_SECRET_KEY);
 
-const authenticate = async (request: { headers: { authorization?: string } }) => {
-  const token = request.headers.authorization?.replace("Bearer ", "");
+type AuthClaims = {
+  sub: string;
+  role: "TRAVELER" | "ADMIN";
+  email: string;
+};
+
+type AuthedRequest = { headers: { authorization?: string }; cookies: Record<string, string | undefined> };
+
+const toNumber = (value: Prisma.Decimal | number | string | null | undefined): number => {
+  if (value === null || value === undefined) {
+    return 0;
+  }
+
+  if (typeof value === "number") {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    return Number(value);
+  }
+
+  return value.toNumber();
+};
+
+const signAccessToken = (claims: AuthClaims): string => {
+  return jwt.sign(claims, env.JWT_ACCESS_SECRET, {
+    expiresIn: `${env.JWT_ACCESS_EXPIRES_MIN}m`
+  });
+};
+
+const signRefreshToken = (claims: AuthClaims): string => {
+  return jwt.sign(claims, env.JWT_REFRESH_SECRET, {
+    expiresIn: `${env.JWT_REFRESH_EXPIRES_DAYS}d`
+  });
+};
+
+const parseClaims = (decoded: string | JwtPayload): AuthClaims => {
+  if (typeof decoded === "string") {
+    throw new Error("Invalid token payload");
+  }
+
+  const claims = {
+    sub: String(decoded.sub),
+    role: decoded.role,
+    email: decoded.email
+  };
+
+  return z
+    .object({
+      sub: z.string().uuid(),
+      role: roleSchema,
+      email: z.string().email()
+    })
+    .parse(claims);
+};
+
+const setRefreshCookie = (reply: { setCookie: Function }, token: string): void => {
+  reply.setCookie("refresh_token", token, {
+    httpOnly: true,
+    secure: env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: env.JWT_REFRESH_EXPIRES_DAYS * 24 * 60 * 60
+  });
+};
+
+const clearRefreshCookie = (reply: { clearCookie: Function }): void => {
+  reply.clearCookie("refresh_token", {
+    httpOnly: true,
+    secure: env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/"
+  });
+};
+
+const requireAuth = (request: AuthedRequest): AuthClaims => {
+  const token = request.headers.authorization?.replace("Bearer ", "").trim();
+
   if (!token) {
-    const err = new Error("Missing token") as Error & { statusCode?: number };
+    const err = new Error("Missing access token") as Error & { statusCode?: number };
     err.statusCode = 401;
     throw err;
   }
 
-  await app.jwt.verify(token);
+  try {
+    const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET);
+    return parseClaims(decoded);
+  } catch {
+    const err = new Error("Invalid access token") as Error & { statusCode?: number };
+    err.statusCode = 401;
+    throw err;
+  }
+};
+
+const requireRole = (claims: AuthClaims, role: "ADMIN" | "TRAVELER"): void => {
+  if (claims.role !== role) {
+    const err = new Error("Forbidden") as Error & { statusCode?: number };
+    err.statusCode = 403;
+    throw err;
+  }
 };
 
 await app.register(cookie);
@@ -35,184 +127,501 @@ await app.register(rateLimit, {
   max: 100,
   timeWindow: "1 minute"
 });
-await app.register(jwt, {
-  secret: env.JWT_ACCESS_SECRET,
-  sign: {
-    expiresIn: `${env.JWT_ACCESS_EXPIRES_MIN}m`
-  }
+await app.register(fastifyRawBody, {
+  field: "rawBody",
+  global: false,
+  encoding: "utf8",
+  runFirst: true,
+  routes: ["/api/v1/stripe/webhook"]
 });
 
 app.get("/api/health", async () => ({ ok: true, service: "smarttravel-api" }));
 
+app.post("/api/v1/auth/register", async (request, reply) => {
+  const body = z
+    .object({
+      email: z.string().email(),
+      password: z.string().min(8),
+      role: roleSchema.optional()
+    })
+    .parse(request.body);
+
+  const exists = await prisma.user.findUnique({ where: { email: body.email } });
+  if (exists) {
+    return reply.code(409).send({ message: "Email already exists" });
+  }
+
+  const hash = await bcrypt.hash(body.password, 10);
+  const user = await prisma.user.create({
+    data: {
+      email: body.email,
+      password: hash,
+      role: body.role ?? "TRAVELER",
+      profile: {}
+    }
+  });
+
+  const claims: AuthClaims = { sub: user.id, role: user.role, email: user.email };
+  const accessToken = signAccessToken(claims);
+  const refreshToken = signRefreshToken(claims);
+
+  setRefreshCookie(reply, refreshToken);
+
+  return reply.code(201).send({
+    accessToken,
+    user: {
+      id: user.id,
+      email: user.email,
+      role: user.role
+    }
+  });
+});
+
+app.post("/api/v1/auth/login", async (request, reply) => {
+  const body = z
+    .object({
+      email: z.string().email(),
+      password: z.string().min(8)
+    })
+    .parse(request.body);
+
+  const user = await prisma.user.findUnique({ where: { email: body.email } });
+  if (!user) {
+    return reply.code(401).send({ message: "Invalid credentials" });
+  }
+
+  const passwordOk = await bcrypt.compare(body.password, user.password);
+  if (!passwordOk) {
+    return reply.code(401).send({ message: "Invalid credentials" });
+  }
+
+  const claims: AuthClaims = { sub: user.id, role: user.role, email: user.email };
+  const accessToken = signAccessToken(claims);
+  const refreshToken = signRefreshToken(claims);
+
+  setRefreshCookie(reply, refreshToken);
+
+  return {
+    accessToken,
+    user: {
+      id: user.id,
+      email: user.email,
+      role: user.role
+    }
+  };
+});
+
+app.post("/api/v1/auth/refresh", async (request, reply) => {
+  const refreshToken = request.cookies.refresh_token;
+
+  if (!refreshToken) {
+    return reply.code(401).send({ message: "Missing refresh token" });
+  }
+
+  try {
+    const decoded = jwt.verify(refreshToken, env.JWT_REFRESH_SECRET);
+    const claims = parseClaims(decoded);
+    const accessToken = signAccessToken(claims);
+    const newRefreshToken = signRefreshToken(claims);
+
+    setRefreshCookie(reply, newRefreshToken);
+    return { accessToken };
+  } catch {
+    return reply.code(401).send({ message: "Invalid refresh token" });
+  }
+});
+
+app.post("/api/v1/auth/logout", async (_request, reply) => {
+  clearRefreshCookie(reply);
+  return reply.code(200).send({ ok: true });
+});
+
+app.get("/api/v1/auth/me", async (request, reply) => {
+  try {
+    const claims = requireAuth(request);
+    return claims;
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
+    return reply.code(statusCode).send({ message: (error as Error).message });
+  }
+});
+
 app.get("/api/v1/providers", async (request) => {
   const query = providerFiltersSchema.parse(request.query);
-  const start = (query.page - 1) * query.pageSize;
+  const skip = (query.page - 1) * query.pageSize;
 
-  const filtered = providers.filter((provider) => {
-    const byCity = query.city ? provider.city.toLowerCase() === query.city.toLowerCase() : true;
-    const byCategory = query.category ? provider.category === query.category : true;
-    const byQuery = query.q
-      ? `${provider.name} ${provider.description}`.toLowerCase().includes(query.q.toLowerCase())
-      : true;
+  const where: Prisma.ProviderWhereInput = {
+    isActive: true,
+    ...(query.city ? { city: { equals: query.city, mode: "insensitive" } } : {}),
+    ...(query.category ? { category: query.category } : {}),
+    ...(query.q
+      ? {
+          OR: [
+            { name: { contains: query.q, mode: "insensitive" } },
+            { description: { contains: query.q, mode: "insensitive" } }
+          ]
+        }
+      : {})
+  };
 
-    return byCity && byCategory && byQuery;
-  });
+  const [data, total] = await Promise.all([
+    prisma.provider.findMany({
+      where,
+      skip,
+      take: query.pageSize,
+      orderBy: { createdAt: "desc" }
+    }),
+    prisma.provider.count({ where })
+  ]);
 
   return {
     page: query.page,
     pageSize: query.pageSize,
-    total: filtered.length,
-    data: filtered.slice(start, start + query.pageSize)
+    total,
+    data
   };
 });
 
 app.get("/api/v1/providers/:id", async (request, reply) => {
-  const params = z.object({ id: z.string() }).parse(request.params);
-  const provider = providers.find((item) => item.id === params.id);
+  const params = z.object({ id: z.string().uuid() }).parse(request.params);
+  const provider = await prisma.provider.findUnique({
+    where: { id: params.id },
+    include: { services: true }
+  });
 
   if (!provider) {
     return reply.code(404).send({ message: "Provider not found" });
   }
 
-  return {
-    ...provider,
-    services: services.filter((service) => service.providerId === provider.id)
-  };
+  return provider;
 });
 
 app.post("/api/v1/bookings", async (request, reply) => {
+  let claims: AuthClaims;
+  try {
+    claims = requireAuth(request);
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
+    return reply.code(statusCode).send({ message: (error as Error).message });
+  }
+
   const body = z
     .object({
-      userId: z.string(),
-      serviceId: z.string(),
+      serviceId: z.string().uuid(),
       date: z.string(),
       pax: z.number().int().positive()
     })
     .parse(request.body);
 
-  const service = services.find((item) => item.id === body.serviceId);
+  const service = await prisma.service.findUnique({ where: { id: body.serviceId } });
   if (!service) {
     return reply.code(404).send({ message: "Service not found" });
   }
 
-  const id = `bk-${Date.now()}`;
-  const totalPrice = service.unit === "PER_PERSON" ? service.pricePublic * body.pax : service.pricePublic;
-  const commissionTotal = service.commissionAmount * body.pax;
+  const servicePrice = toNumber(service.pricePublic);
+  const serviceCommission = toNumber(service.commissionAmount);
+  const totalPrice = service.unit === "PER_PERSON" ? servicePrice * body.pax : servicePrice;
+  const commissionTotal = serviceCommission * body.pax;
 
-  const booking: Booking = {
-    id,
-    userId: body.userId,
-    serviceId: body.serviceId,
-    date: body.date,
-    pax: body.pax,
-    status: "PENDING",
-    totalPrice,
-    commissionTotal
-  };
+  const booking = await prisma.booking.create({
+    data: {
+      userId: claims.sub,
+      serviceId: body.serviceId,
+      date: new Date(body.date),
+      pax: body.pax,
+      status: "PENDING",
+      totalPrice,
+      commissionTotal
+    }
+  });
 
-  bookings.set(id, booking);
-
-  return reply.code(201).send(booking);
+  return reply.code(201).send({
+    ...booking,
+    totalPrice: toNumber(booking.totalPrice),
+    commissionTotal: toNumber(booking.commissionTotal)
+  });
 });
 
 app.get("/api/v1/bookings/:id", async (request, reply) => {
-  const params = z.object({ id: z.string() }).parse(request.params);
-  const booking = bookings.get(params.id);
+  let claims: AuthClaims;
+  try {
+    claims = requireAuth(request);
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
+    return reply.code(statusCode).send({ message: (error as Error).message });
+  }
+
+  const params = z.object({ id: z.string().uuid() }).parse(request.params);
+  const booking = await prisma.booking.findUnique({ where: { id: params.id } });
 
   if (!booking) {
     return reply.code(404).send({ message: "Booking not found" });
   }
 
-  return booking;
+  if (booking.userId !== claims.sub && claims.role !== "ADMIN") {
+    return reply.code(403).send({ message: "Forbidden" });
+  }
+
+  return {
+    ...booking,
+    totalPrice: toNumber(booking.totalPrice),
+    commissionTotal: toNumber(booking.commissionTotal)
+  };
 });
 
-app.post("/api/v1/stripe/webhook", async (_request, reply) => {
+app.post("/api/v1/payments/intent", async (request, reply) => {
+  let claims: AuthClaims;
+  try {
+    claims = requireAuth(request);
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
+    return reply.code(statusCode).send({ message: (error as Error).message });
+  }
+
+  const body = z
+    .object({
+      bookingId: z.string().uuid(),
+      currency: z.string().default("mad")
+    })
+    .parse(request.body);
+
+  const booking = await prisma.booking.findUnique({ where: { id: body.bookingId } });
+  if (!booking) {
+    return reply.code(404).send({ message: "Booking not found" });
+  }
+
+  if (booking.userId !== claims.sub && claims.role !== "ADMIN") {
+    return reply.code(403).send({ message: "Forbidden" });
+  }
+
+  const amount = Math.round(toNumber(booking.totalPrice) * 100);
+  const intent = await stripe.paymentIntents.create({
+    amount,
+    currency: body.currency.toLowerCase(),
+    metadata: {
+      bookingId: booking.id,
+      userId: booking.userId
+    }
+  });
+
+  await prisma.booking.update({
+    where: { id: booking.id },
+    data: { paymentIntent: intent.id }
+  });
+
+  return {
+    bookingId: booking.id,
+    paymentIntentId: intent.id,
+    clientSecret: intent.client_secret
+  };
+});
+
+app.post("/api/v1/stripe/webhook", async (request, reply) => {
+  const signature = request.headers["stripe-signature"];
+  const rawBody = (request as unknown as { rawBody?: string }).rawBody;
+
+  if (!signature || !rawBody) {
+    return reply.code(400).send({ message: "Missing webhook signature or body" });
+  }
+
+  let event: Stripe.Event;
+  try {
+    event = stripe.webhooks.constructEvent(rawBody, signature, env.STRIPE_WEBHOOK_SECRET);
+  } catch {
+    return reply.code(400).send({ message: "Invalid webhook signature" });
+  }
+
+  if (event.type === "payment_intent.succeeded") {
+    const intent = event.data.object as Stripe.PaymentIntent;
+    await prisma.booking.updateMany({
+      where: { paymentIntent: intent.id },
+      data: { status: "CONFIRMED" }
+    });
+  }
+
+  if (event.type === "payment_intent.payment_failed") {
+    const intent = event.data.object as Stripe.PaymentIntent;
+    await prisma.booking.updateMany({
+      where: { paymentIntent: intent.id },
+      data: { status: "CANCELLED" }
+    });
+  }
+
   return reply.code(200).send({ received: true });
 });
 
 app.post("/api/v1/itineraries", async (request, reply) => {
+  let claims: AuthClaims;
+  try {
+    claims = requireAuth(request);
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
+    return reply.code(statusCode).send({ message: (error as Error).message });
+  }
+
   const body = z
     .object({
-      userId: z.string(),
       title: z.string().min(2),
       intakeForm: z.record(z.unknown())
     })
     .parse(request.body);
 
-  const id = `iti-${Date.now()}`;
-  const itinerary: Itinerary = {
-    id,
-    userId: body.userId,
-    title: body.title,
-    status: "DRAFT",
-    days: [],
-    totalPrice: 0,
-    intakeForm: body.intakeForm
-  };
-
-  itineraryStore.set(id, itinerary);
-  return reply.code(201).send(itinerary);
-});
-
-app.get("/api/v1/itineraries/:id", async (request, reply) => {
-  const params = z.object({ id: z.string() }).parse(request.params);
-  const itinerary = itineraryStore.get(params.id);
-
-  if (!itinerary) {
-    return reply.code(404).send({ message: "Itinerary not found" });
-  }
-
-  return itinerary;
-});
-
-app.post("/api/v1/itineraries/:id/validate", async (request, reply) => {
-  const params = z.object({ id: z.string() }).parse(request.params);
-  const itinerary = itineraryStore.get(params.id);
-
-  if (!itinerary) {
-    return reply.code(404).send({ message: "Itinerary not found" });
-  }
-
-  itinerary.status = "VALIDATED";
-  itineraryStore.set(itinerary.id, itinerary);
-
-  return reply.code(200).send(itinerary);
-});
-
-app.get("/api/v1/group-trips", async () => {
-  return Array.from(groupTripStore.values()).map((trip) => ({
-    ...trip,
-    seatsRemaining: Math.max(trip.maxCapacity - trip.participants, 0)
-  }));
-});
-
-app.post("/api/v1/group-trips/:id/join", async (request, reply) => {
-  const params = z.object({ id: z.string() }).parse(request.params);
-  const body = z.object({ userId: z.string(), pax: z.number().int().positive().default(1) }).parse(request.body);
-  const trip = groupTripStore.get(params.id);
-
-  if (!trip) {
-    return reply.code(404).send({ message: "Group trip not found" });
-  }
-
-  if (trip.participants + body.pax > trip.maxCapacity) {
-    return reply.code(400).send({ message: "Not enough seats available" });
-  }
-
-  trip.participants += body.pax;
-  groupTripStore.set(trip.id, trip);
+  const itinerary = await prisma.itinerary.create({
+    data: {
+      userId: claims.sub,
+      title: body.title,
+      status: "DRAFT",
+      days: [] as Prisma.InputJsonValue,
+      totalPrice: 0,
+      intakeForm: body.intakeForm as Prisma.InputJsonValue
+    }
+  });
 
   return reply.code(201).send({
-    id: `join-${Date.now()}`,
-    groupTripId: trip.id,
-    userId: body.userId,
-    pax: body.pax,
-    totalPrice: body.pax * trip.pricePerPerson
+    ...itinerary,
+    totalPrice: toNumber(itinerary.totalPrice)
   });
 });
 
+app.get("/api/v1/itineraries/:id", async (request, reply) => {
+  let claims: AuthClaims;
+  try {
+    claims = requireAuth(request);
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
+    return reply.code(statusCode).send({ message: (error as Error).message });
+  }
+
+  const params = z.object({ id: z.string().uuid() }).parse(request.params);
+  const itinerary = await prisma.itinerary.findUnique({ where: { id: params.id } });
+
+  if (!itinerary) {
+    return reply.code(404).send({ message: "Itinerary not found" });
+  }
+
+  if (itinerary.userId !== claims.sub && claims.role !== "ADMIN") {
+    return reply.code(403).send({ message: "Forbidden" });
+  }
+
+  return {
+    ...itinerary,
+    totalPrice: toNumber(itinerary.totalPrice)
+  };
+});
+
+app.post("/api/v1/itineraries/:id/validate", async (request, reply) => {
+  let claims: AuthClaims;
+  try {
+    claims = requireAuth(request);
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
+    return reply.code(statusCode).send({ message: (error as Error).message });
+  }
+
+  const params = z.object({ id: z.string().uuid() }).parse(request.params);
+  const itinerary = await prisma.itinerary.findUnique({ where: { id: params.id } });
+
+  if (!itinerary) {
+    return reply.code(404).send({ message: "Itinerary not found" });
+  }
+
+  if (itinerary.userId !== claims.sub && claims.role !== "ADMIN") {
+    return reply.code(403).send({ message: "Forbidden" });
+  }
+
+  const updated = await prisma.itinerary.update({
+    where: { id: itinerary.id },
+    data: { status: "VALIDATED" }
+  });
+
+  return reply.code(200).send({
+    ...updated,
+    totalPrice: toNumber(updated.totalPrice)
+  });
+});
+
+app.get("/api/v1/group-trips", async () => {
+  const trips = await prisma.groupTrip.findMany({
+    include: { joins: { select: { pax: true } } },
+    orderBy: { startDate: "asc" }
+  });
+
+  return trips.map((trip) => {
+    const occupied = trip.joins.reduce((sum, item) => sum + item.pax, 0);
+    return {
+      ...trip,
+      pricePerPerson: toNumber(trip.pricePerPerson),
+      seatsRemaining: Math.max(trip.maxCapacity - occupied, 0)
+    };
+  });
+});
+
+app.post("/api/v1/group-trips/:id/join", async (request, reply) => {
+  let claims: AuthClaims;
+  try {
+    claims = requireAuth(request);
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
+    return reply.code(statusCode).send({ message: (error as Error).message });
+  }
+
+  const params = z.object({ id: z.string().uuid() }).parse(request.params);
+  const body = z.object({ pax: z.number().int().positive().default(1) }).parse(request.body);
+
+  try {
+    const join = await prisma.$transaction(async (tx) => {
+      const trip = await tx.groupTrip.findUnique({
+        where: { id: params.id },
+        include: { joins: { select: { pax: true } } }
+      });
+
+      if (!trip) {
+        throw new Error("Group trip not found");
+      }
+
+      const occupied = trip.joins.reduce((sum, item) => sum + item.pax, 0);
+      if (occupied + body.pax > trip.maxCapacity) {
+        throw new Error("Not enough seats available");
+      }
+
+      const totalPrice = toNumber(trip.pricePerPerson) * body.pax;
+      return tx.groupTripJoin.create({
+        data: {
+          groupTripId: trip.id,
+          userId: claims.sub,
+          pax: body.pax,
+          totalPrice
+        }
+      });
+    });
+
+    return reply.code(201).send({
+      ...join,
+      totalPrice: toNumber(join.totalPrice)
+    });
+  } catch (error) {
+    const message = (error as Error).message;
+    if (message === "Group trip not found") {
+      return reply.code(404).send({ message });
+    }
+
+    if (message === "Not enough seats available") {
+      return reply.code(400).send({ message });
+    }
+
+    return reply.code(500).send({ message: "Failed to join trip" });
+  }
+});
+
 app.post("/api/v1/admin/providers", async (request, reply) => {
-  await authenticate(request);
+  let claims: AuthClaims;
+  try {
+    claims = requireAuth(request);
+    requireRole(claims, "ADMIN");
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
+    return reply.code(statusCode).send({ message: (error as Error).message });
+  }
 
   const body = z
     .object({
@@ -224,38 +633,112 @@ app.post("/api/v1/admin/providers", async (request, reply) => {
     })
     .parse(request.body);
 
-  const provider = {
-    id: `prov-${Date.now()}`,
-    ...body,
-    photos: [],
-    isActive: true
-  };
+  const provider = await prisma.provider.create({
+    data: {
+      ...body,
+      photos: [],
+      isActive: true
+    }
+  });
 
-  providers.push(provider);
   return reply.code(201).send(provider);
 });
 
-app.get("/api/v1/admin/commissions", async (request) => {
-  await authenticate(request);
+app.put("/api/v1/admin/providers/:id", async (request, reply) => {
+  let claims: AuthClaims;
+  try {
+    claims = requireAuth(request);
+    requireRole(claims, "ADMIN");
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
+    return reply.code(statusCode).send({ message: (error as Error).message });
+  }
 
-  const report = Array.from(bookings.values()).reduce<Record<string, { providerId: string; commissionTotal: number }>>(
+  const params = z.object({ id: z.string().uuid() }).parse(request.params);
+  const body = z
+    .object({
+      name: z.string().min(2).optional(),
+      city: z.string().optional(),
+      category: z.enum(["RESTAURANT", "ACTIVITY", "TRANSPORT", "ACCOM", "EXCURSION"]).optional(),
+      description: z.string().optional(),
+      location: z.object({ lat: z.number(), lng: z.number() }).optional(),
+      isActive: z.boolean().optional()
+    })
+    .parse(request.body);
+
+  try {
+    const provider = await prisma.provider.update({
+      where: { id: params.id },
+      data: body
+    });
+
+    return reply.code(200).send(provider);
+  } catch {
+    return reply.code(404).send({ message: "Provider not found" });
+  }
+});
+
+app.delete("/api/v1/admin/providers/:id", async (request, reply) => {
+  let claims: AuthClaims;
+  try {
+    claims = requireAuth(request);
+    requireRole(claims, "ADMIN");
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
+    return reply.code(statusCode).send({ message: (error as Error).message });
+  }
+
+  const params = z.object({ id: z.string().uuid() }).parse(request.params);
+
+  try {
+    await prisma.provider.delete({ where: { id: params.id } });
+    return reply.code(204).send();
+  } catch {
+    return reply.code(404).send({ message: "Provider not found" });
+  }
+});
+
+app.get("/api/v1/admin/commissions", async (request, reply) => {
+  let claims: AuthClaims;
+  try {
+    claims = requireAuth(request);
+    requireRole(claims, "ADMIN");
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
+    return reply.code(statusCode).send({ message: (error as Error).message });
+  }
+
+  const records = await prisma.booking.findMany({
+    include: {
+      service: {
+        select: {
+          providerId: true,
+          provider: {
+            select: { name: true }
+          }
+        }
+      }
+    }
+  });
+
+  const grouped = records.reduce<Record<string, { providerId: string; providerName: string; commissionTotal: number }>>(
     (acc, booking) => {
-      const service = services.find((item) => item.id === booking.serviceId);
-      if (!service) {
-        return acc;
+      const key = booking.service.providerId;
+      if (!acc[key]) {
+        acc[key] = {
+          providerId: key,
+          providerName: booking.service.provider.name,
+          commissionTotal: 0
+        };
       }
 
-      if (!acc[service.providerId]) {
-        acc[service.providerId] = { providerId: service.providerId, commissionTotal: 0 };
-      }
-
-      acc[service.providerId].commissionTotal += booking.commissionTotal;
+      acc[key].commissionTotal += toNumber(booking.commissionTotal);
       return acc;
     },
     {}
   );
 
-  return Object.values(report);
+  return Object.values(grouped);
 });
 
 const start = async () => {
@@ -263,6 +746,7 @@ const start = async () => {
     await app.listen({ port: 4000, host: "0.0.0.0" });
   } catch (error) {
     app.log.error(error);
+    await prisma.$disconnect();
     process.exit(1);
   }
 };
