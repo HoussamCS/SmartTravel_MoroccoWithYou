@@ -10,6 +10,7 @@ import fastifyRawBody from "fastify-raw-body";
 import jwt, { type JwtPayload } from "jsonwebtoken";
 import Stripe from "stripe";
 import { z } from "zod";
+import { deleteByPattern, getJsonCache, setJsonCache } from "./cache/redis.js";
 import { bookingEmailQueue, commissionReportQueue } from "./jobs/queues.js";
 
 const env = appEnvSchema.parse(process.env);
@@ -250,6 +251,18 @@ app.get("/api/v1/auth/me", async (request, reply) => {
 app.get("/api/v1/providers", async (request) => {
   const query = providerFiltersSchema.parse(request.query);
   const skip = (query.page - 1) * query.pageSize;
+  const cacheKey = `providers:${JSON.stringify(query)}`;
+
+  const cached = await getJsonCache<{
+    page: number;
+    pageSize: number;
+    total: number;
+    data: Array<unknown>;
+  }>(cacheKey);
+
+  if (cached) {
+    return cached;
+  }
 
   const where: Prisma.ProviderWhereInput = {
     isActive: true,
@@ -275,12 +288,15 @@ app.get("/api/v1/providers", async (request) => {
     prisma.provider.count({ where })
   ]);
 
-  return {
+  const payload = {
     page: query.page,
     pageSize: query.pageSize,
     total,
     data
   };
+
+  await setJsonCache(cacheKey, payload, 60);
+  return payload;
 });
 
 app.get("/api/v1/providers/:id", async (request, reply) => {
@@ -657,6 +673,8 @@ app.post("/api/v1/admin/providers", async (request, reply) => {
     }
   });
 
+  await deleteByPattern("providers:*");
+
   return reply.code(201).send(provider);
 });
 
@@ -688,6 +706,8 @@ app.put("/api/v1/admin/providers/:id", async (request, reply) => {
       data: body
     });
 
+    await deleteByPattern("providers:*");
+
     return reply.code(200).send(provider);
   } catch {
     return reply.code(404).send({ message: "Provider not found" });
@@ -708,6 +728,7 @@ app.delete("/api/v1/admin/providers/:id", async (request, reply) => {
 
   try {
     await prisma.provider.delete({ where: { id: params.id } });
+    await deleteByPattern("providers:*");
     return reply.code(204).send();
   } catch {
     return reply.code(404).send({ message: "Provider not found" });
