@@ -31,3 +31,25 @@ export type Booking = {
   commissionTotal: number;
   paymentIntent?: string;
 };
+
+export type Itinerary = {
+  id: string;
+  userId: string;
+  title: string;
+  status: "DRAFT" | "SENT" | "VALIDATED" | "BOOKED";
+  days: Array<{ day: number; items: Array<{ serviceId: string; time: string }> }>;
+  totalPrice: number;
+  intakeForm: Record<string, unknown>;
+};
+
+export type GroupTrip = {
+  id: string;
+  title: string;
+  destination: string;
+  startDate: string;
+  endDate: string;
+  maxCapacity: number;
+  program: Array<{ day: number; title: string; details: string }>;
+  pricePerPerson: number;
+  participants: number;
+};

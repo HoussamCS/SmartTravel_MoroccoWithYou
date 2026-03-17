@@ -1,4 +1,4 @@
-import type { Provider, Service } from "./types.js";
+import type { GroupTrip, Itinerary, Provider, Service } from "./types.js";
 
 export const providers: Provider[] = [
   {
@@ -39,5 +39,39 @@ export const services: Service[] = [
     pricePublic: 250,
     commissionAmount: 25,
     unit: "PER_PERSON"
+  }
+];
+
+export const itineraries: Itinerary[] = [
+  {
+    id: "iti-1",
+    userId: "usr-1",
+    title: "Weekend Marrakech",
+    status: "SENT",
+    days: [
+      {
+        day: 1,
+        items: [{ serviceId: "svc-1", time: "10:00" }]
+      }
+    ],
+    totalPrice: 1200,
+    intakeForm: { style: "adventure", budget: 2500 }
+  }
+];
+
+export const groupTrips: GroupTrip[] = [
+  {
+    id: "gt-1",
+    title: "Sahara Escape",
+    destination: "Merzouga",
+    startDate: "2026-05-20",
+    endDate: "2026-05-24",
+    maxCapacity: 16,
+    program: [
+      { day: 1, title: "Depart Marrakech", details: "Route vers Ouarzazate" },
+      { day: 2, title: "Dunes", details: "Bivouac et coucher de soleil" }
+    ],
+    pricePerPerson: 3400,
+    participants: 6
   }
 ];
