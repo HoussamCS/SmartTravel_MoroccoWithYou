@@ -6,6 +6,9 @@
 - Public web app (Next.js 14 App Router, TypeScript, Tailwind)
 - Admin app scaffold (Next.js 14)
 - API app (Fastify) with `/api/v1` versioning and validation by Zod
+- API now connected to Prisma (PostgreSQL models) for core CRUD flows
+- JWT auth flow with refresh token in httpOnly cookie
+- Stripe payment intent endpoint + verified webhook handling
 - Core endpoints in place:
   - `GET /api/v1/providers`
   - `GET /api/v1/providers/:id`
@@ -24,9 +27,8 @@
 
 ## Next implementation priorities
 
-1. Connect API to Prisma repositories instead of in-memory stores.
-2. Add JWT refresh token flow (httpOnly cookie) and role-based authorization layer.
-3. Implement Stripe payment intent + webhook signature verification.
-4. Add BullMQ jobs for confirmation emails and monthly commission reports.
-5. Build admin CRUD screens with forms and table filters.
-6. Add pgvector + recommendation endpoint for optional AI scope.
+1. Add role-aware policy checks for all admin actions and ownership checks for all traveler resources.
+2. Add BullMQ jobs for confirmation emails and monthly commission reports.
+3. Build admin CRUD screens with forms and table filters.
+4. Add pgvector + recommendation endpoint for optional AI scope.
+5. Add Redis-backed caching/session strategy and S3/R2 upload flow.

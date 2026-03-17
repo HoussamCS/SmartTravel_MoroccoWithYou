@@ -2,6 +2,14 @@
 
 Base URL: `/api/v1`
 
+## Auth
+
+- `POST /auth/register`: register account and receive access token + refresh cookie
+- `POST /auth/login`: login and receive access token + refresh cookie
+- `POST /auth/refresh`: rotate refresh token and issue a new access token
+- `POST /auth/logout`: clear refresh cookie
+- `GET /auth/me`: return current user claims from access token
+
 ## Providers
 
 - `GET /providers`: list providers with filters `city`, `category`, `q`, `page`, `pageSize`
@@ -30,7 +38,8 @@ Base URL: `/api/v1`
 
 ## Payments
 
-- `POST /stripe/webhook`: payment webhook endpoint (stub for now)
+- `POST /payments/intent`: create Stripe PaymentIntent for a booking
+- `POST /stripe/webhook`: Stripe webhook with signature verification
 
 ## Health
 
