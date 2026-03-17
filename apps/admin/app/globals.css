@@ -1,10 +1,108 @@
 body {
   margin: 0;
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-  background: #f6f7fb;
+  background: linear-gradient(180deg, #eef3ff, #f7f8fb);
   color: #1e2430;
 }
 
 * {
   box-sizing: border-box;
+}
+
+.admin-shell {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.admin-header h1 {
+  margin: 0;
+}
+
+.admin-header p {
+  margin-top: 8px;
+  color: #5f6880;
+}
+
+.admin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 14px;
+}
+
+.admin-card {
+  background: #fff;
+  border: 1px solid #e5e8f2;
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.admin-card h2 {
+  margin: 0;
+  font-size: 14px;
+  color: #59627a;
+}
+
+.admin-card .metric {
+  margin: 8px 0 2px;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.admin-card a {
+  display: inline-block;
+  margin-top: 12px;
+  text-decoration: none;
+  color: #1f4cd4;
+  font-weight: 600;
+}
+
+.grid-form {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.grid-form.compact {
+  margin-top: 0;
+}
+
+.grid-form input,
+.grid-form select,
+.grid-form button {
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid #d8deee;
+  padding: 0 10px;
+}
+
+.grid-form button {
+  background: #1f4cd4;
+  color: white;
+  border: none;
+  font-weight: 600;
+}
+
+.provider-list {
+  display: grid;
+  gap: 12px;
+}
+
+.provider-item {
+  border: 1px solid #e5e8f2;
+  border-radius: 12px;
+  background: #fff;
+  padding: 12px;
+}
+
+button.danger {
+  margin-top: 10px;
+  height: 36px;
+  border: none;
+  border-radius: 8px;
+  background: #d63939;
+  color: #fff;
+  font-weight: 600;
+  padding: 0 12px;
 }
