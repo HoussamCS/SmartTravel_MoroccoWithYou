@@ -1,0 +1,31 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-sand: #f8f2e8;
+  --bg-sky: #dceff2;
+  --ink: #1f1f1f;
+  --accent: #0f3f52;
+  --warm: #9e5f38;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 15% 10%, rgba(255, 211, 168, 0.5), transparent 45%),
+    radial-gradient(circle at 85% 5%, rgba(116, 180, 197, 0.5), transparent 35%),
+    linear-gradient(180deg, var(--bg-sand), #ffffff 50%, var(--bg-sky));
+  min-height: 100vh;
+}
+
+.hero-grid {
+  background-image: linear-gradient(rgba(15, 63, 82, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 63, 82, 0.08) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
