@@ -1,6 +1,7 @@
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
+import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@smarttravel/db";
 import { appEnvSchema, providerFiltersSchema, roleSchema } from "@smarttravel/shared";
@@ -17,6 +18,30 @@ const env = appEnvSchema.parse(process.env);
 
 const app = Fastify({ logger: true });
 const stripe = new Stripe(env.STRIPE_SECRET_KEY);
+
+const eventRequestInputSchema = z.object({
+  eventType: z.string().min(2),
+  date: z.string(),
+  budget: z.number().positive().optional(),
+  peopleCount: z.number().int().positive(),
+  message: z.string().min(5),
+  requesterName: z.string().optional(),
+  requesterMail: z.string().email().optional()
+});
+
+type EventRequestFallback = {
+  id: string;
+  eventType: string;
+  date: Date;
+  budget: number | null;
+  peopleCount: number;
+  message: string;
+  requesterName: string | null;
+  requesterMail: string | null;
+  createdAt: Date;
+};
+
+const eventRequestsFallbackStore: EventRequestFallback[] = [];
 
 type AuthClaims = {
   sub: string;
@@ -867,34 +892,44 @@ app.get("/api/v1/admin/jobs/logs", async (request, reply) => {
 });
 
 app.post("/api/v1/event-requests", async (request, reply) => {
-  const body = z
-    .object({
-      eventType: z.string().min(2),
-      date: z.string(),
-      budget: z.number().positive().optional(),
-      peopleCount: z.number().int().positive(),
-      message: z.string().min(5),
-      requesterName: z.string().optional(),
-      requesterMail: z.string().email().optional()
-    })
-    .parse(request.body);
+  const body = eventRequestInputSchema.parse(request.body);
 
-  const eventRequest = await prisma.eventRequest.create({
-    data: {
+  try {
+    const eventRequest = await prisma.eventRequest.create({
+      data: {
+        eventType: body.eventType,
+        date: new Date(body.date),
+        budget: body.budget,
+        peopleCount: body.peopleCount,
+        message: body.message,
+        requesterName: body.requesterName,
+        requesterMail: body.requesterMail
+      }
+    });
+
+    return reply.code(201).send({
+      ...eventRequest,
+      budget: eventRequest.budget ? toNumber(eventRequest.budget) : null
+    });
+  } catch (error) {
+    app.log.warn({ err: error }, "Database unavailable, storing event request in fallback memory store");
+
+    const fallbackItem: EventRequestFallback = {
+      id: randomUUID(),
       eventType: body.eventType,
       date: new Date(body.date),
-      budget: body.budget,
+      budget: body.budget ?? null,
       peopleCount: body.peopleCount,
       message: body.message,
-      requesterName: body.requesterName,
-      requesterMail: body.requesterMail
-    }
-  });
+      requesterName: body.requesterName ?? null,
+      requesterMail: body.requesterMail ?? null,
+      createdAt: new Date()
+    };
 
-  return reply.code(201).send({
-    ...eventRequest,
-    budget: eventRequest.budget ? toNumber(eventRequest.budget) : null
-  });
+    eventRequestsFallbackStore.unshift(fallbackItem);
+
+    return reply.code(201).send(fallbackItem);
+  }
 });
 
 app.get("/api/v1/admin/event-requests", async (request, reply) => {
@@ -907,15 +942,20 @@ app.get("/api/v1/admin/event-requests", async (request, reply) => {
     return reply.code(statusCode).send({ message: (error as Error).message });
   }
 
-  const rows = await prisma.eventRequest.findMany({
-    orderBy: { createdAt: "desc" },
-    take: 100
-  });
+  try {
+    const rows = await prisma.eventRequest.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 100
+    });
 
-  return rows.map((row) => ({
-    ...row,
-    budget: row.budget ? toNumber(row.budget) : null
-  }));
+    return rows.map((row) => ({
+      ...row,
+      budget: row.budget ? toNumber(row.budget) : null
+    }));
+  } catch (error) {
+    app.log.warn({ err: error }, "Database unavailable, reading event requests from fallback memory store");
+    return eventRequestsFallbackStore.slice(0, 100);
+  }
 });
 
 const start = async () => {
