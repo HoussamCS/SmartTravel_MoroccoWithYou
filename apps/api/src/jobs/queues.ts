@@ -2,7 +2,10 @@ import { Queue } from "bullmq";
 
 const redisConnection = {
   url: process.env.REDIS_URL ?? "redis://127.0.0.1:6379",
-  maxRetriesPerRequest: null
+  maxRetriesPerRequest: null,
+  // Slow down reconnect attempts when Redis is offline so the process stays stable
+  retryStrategy: (times: number) => Math.min(times * 2000, 30000),
+  enableOfflineQueue: false,
 };
 
 export const BOOKING_EMAIL_QUEUE = "booking-email";
@@ -27,11 +30,18 @@ export const bookingEmailQueue = new Queue<BookingEmailJob, void, BookingEmailJo
   connection: redisConnection
 });
 
+// Suppress unhandled error events so missing Redis doesn't crash the process
+bookingEmailQueue.on("error", (err) => {
+  console.warn("[BullMQ] bookingEmailQueue error (non-fatal):", err.message);
+});
+
 export const commissionReportQueue = new Queue<CommissionReportJob, void, CommissionReportJobName>(
   COMMISSION_REPORT_QUEUE,
-  {
-  connection: redisConnection
-  }
+  { connection: redisConnection }
 );
+
+commissionReportQueue.on("error", (err) => {
+  console.warn("[BullMQ] commissionReportQueue error (non-fatal):", err.message);
+});
 
 export { redisConnection };
