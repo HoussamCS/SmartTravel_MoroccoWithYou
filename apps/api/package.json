@@ -20,7 +20,7 @@
   "dependencies": {
     "@fastify/cookie": "^10.0.1",
     "@fastify/cors": "^10.0.2",
-    "@fastify/rate-limit": "^9.1.0",
+    "@fastify/rate-limit": "^10.3.0",
     "@prisma/client": "^5.21.1",
     "@smarttravel/db": "0.1.0",
     "@smarttravel/shared": "0.1.0",
