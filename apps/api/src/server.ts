@@ -145,6 +145,14 @@ const requireRole = (claims: AuthClaims, role: "ADMIN" | "TRAVELER"): void => {
   }
 };
 
+const assertOwnerOrAdmin = (claims: AuthClaims, ownerUserId: string): void => {
+  if (claims.role !== "ADMIN" && claims.sub !== ownerUserId) {
+    const err = new Error("Forbidden") as Error & { statusCode?: number };
+    err.statusCode = 403;
+    throw err;
+  }
+};
+
 await app.register(cookie);
 await app.register(cors, {
   origin: env.ALLOWED_ORIGINS.split(","),
@@ -400,8 +408,11 @@ app.get("/api/v1/bookings/:id", async (request, reply) => {
     return reply.code(404).send({ message: "Booking not found" });
   }
 
-  if (booking.userId !== claims.sub && claims.role !== "ADMIN") {
-    return reply.code(403).send({ message: "Forbidden" });
+  try {
+    assertOwnerOrAdmin(claims, booking.userId);
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 403;
+    return reply.code(statusCode).send({ message: (error as Error).message });
   }
 
   return {
@@ -432,8 +443,11 @@ app.post("/api/v1/payments/intent", async (request, reply) => {
     return reply.code(404).send({ message: "Booking not found" });
   }
 
-  if (booking.userId !== claims.sub && claims.role !== "ADMIN") {
-    return reply.code(403).send({ message: "Forbidden" });
+  try {
+    assertOwnerOrAdmin(claims, booking.userId);
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 403;
+    return reply.code(statusCode).send({ message: (error as Error).message });
   }
 
   const amount = Math.round(toNumber(booking.totalPrice) * 100);
@@ -556,8 +570,11 @@ app.get("/api/v1/itineraries/:id", async (request, reply) => {
     return reply.code(404).send({ message: "Itinerary not found" });
   }
 
-  if (itinerary.userId !== claims.sub && claims.role !== "ADMIN") {
-    return reply.code(403).send({ message: "Forbidden" });
+  try {
+    assertOwnerOrAdmin(claims, itinerary.userId);
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 403;
+    return reply.code(statusCode).send({ message: (error as Error).message });
   }
 
   return {
@@ -582,8 +599,11 @@ app.post("/api/v1/itineraries/:id/validate", async (request, reply) => {
     return reply.code(404).send({ message: "Itinerary not found" });
   }
 
-  if (itinerary.userId !== claims.sub && claims.role !== "ADMIN") {
-    return reply.code(403).send({ message: "Forbidden" });
+  try {
+    assertOwnerOrAdmin(claims, itinerary.userId);
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 403;
+    return reply.code(statusCode).send({ message: (error as Error).message });
   }
 
   const updated = await prisma.itinerary.update({
