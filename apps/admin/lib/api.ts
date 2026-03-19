@@ -52,9 +52,17 @@ export const fetchProviders = async (): Promise<ProviderItem[]> => {
   return payload.data ?? [];
 };
 
-const getHeaders = () => ({
-  authorization: `Bearer ${process.env.ADMIN_BOOTSTRAP_TOKEN ?? ""}`
-});
+const getHeaders = (): HeadersInit | undefined => {
+  const token = (process.env.ADMIN_ACCESS_TOKEN ?? process.env.ADMIN_BOOTSTRAP_TOKEN ?? "").trim();
+
+  if (!token) {
+    return undefined;
+  }
+
+  return {
+    authorization: `Bearer ${token}`
+  };
+};
 
 export const fetchCommissions = async (): Promise<CommissionRow[]> => {
   const response = await fetch(`${ADMIN_API_BASE}/admin/commissions`, {
