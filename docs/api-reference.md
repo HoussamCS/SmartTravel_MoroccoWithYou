@@ -10,6 +10,13 @@ Base URL: `/api/v1`
 - `POST /auth/logout`: clear refresh cookie
 - `GET /auth/me`: return current user claims from access token
 
+### Authorization policy
+
+- Traveler resources (`/bookings/:id`, `/payments/intent`, `/itineraries/:id`, `/itineraries/:id/validate`) enforce owner-or-admin access.
+- Admin resources (`/admin/*`) require either:
+	- a valid ADMIN JWT access token in `Authorization: Bearer <token>`, or
+	- a configured bootstrap token (`ADMIN_BOOTSTRAP_TOKEN`) sent in `Authorization: Bearer <token>`.
+
 ## Providers
 
 - `GET /providers`: list providers with filters `city`, `category`, `q`, `page`, `pageSize`
