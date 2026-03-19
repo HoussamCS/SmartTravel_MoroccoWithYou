@@ -35,7 +35,7 @@ export default function HomePage() {
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link
-              href="/special-request"
+              href="/experiences"
               className="rounded-full bg-warm px-5 py-3 text-sm font-semibold text-white transition hover:scale-[1.02]"
             >
               Explorer les experiences
@@ -61,6 +61,26 @@ export default function HomePage() {
             <p className="mt-2 text-sm text-slate-700">{feature.text}</p>
           </article>
         ))}
+      </section>
+
+      <section className="mt-10 rounded-3xl border border-atlas/15 bg-atlas p-6 text-white shadow-xl md:p-8">
+        <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+          <div className="max-w-3xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/70">Nouveau dans le MVP</p>
+            <h2 className="mt-3 text-3xl font-black leading-tight md:text-4xl">
+              Le catalogue public est maintenant accessible avec navigation vers chaque prestataire.
+            </h2>
+            <p className="mt-4 text-sm leading-7 text-white/80 md:text-base">
+              Vous pouvez parcourir les experiences actives, filtrer par ville ou categorie, puis ouvrir une fiche detail pour voir le positionnement du prestataire et ses services.
+            </p>
+          </div>
+          <Link
+            href="/experiences"
+            className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-atlas transition hover:scale-[1.02]"
+          >
+            Ouvrir le catalogue
+          </Link>
+        </div>
       </section>
 
       <style>{`@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0);} }`}</style>

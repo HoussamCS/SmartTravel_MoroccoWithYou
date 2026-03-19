@@ -14,6 +14,7 @@
 - Event Requests module implemented (public submit + admin listing)
 - Admin pages implemented: providers CRUD, commissions/jobs, event requests inbox
 - Public special request page implemented in web app
+- Public catalog browsing UI implemented (`/experiences` + `/experiences/[id]`)
 - Core endpoints in place:
   - `GET /api/v1/providers`
   - `GET /api/v1/providers/:id`
@@ -33,7 +34,8 @@
 ## Next implementation priorities
 
 1. Add role-aware policy checks for all admin actions and ownership checks for all traveler resources.
-2. Add S3/R2 media uploads with MIME/size validation.
-3. Add pgvector + recommendation endpoint for optional AI scope.
-4. Add admin management screens for group trips and user operations.
-5. Add automated monthly schedule bootstrapping (startup scheduler + retry/reporting metrics).
+2. Add web booking flow UI connected to `POST /api/v1/bookings` and Stripe payment intent.
+3. Add S3/R2 media uploads with MIME/size validation.
+4. Add pgvector + recommendation endpoint for optional AI scope.
+5. Add admin management screens for group trips and user operations.
+6. Add automated monthly schedule bootstrapping (startup scheduler + retry/reporting metrics).
