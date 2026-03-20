@@ -109,10 +109,18 @@ export default async function ExperienceDetailPage({ params }: { params: { id: s
                             Commission plateforme incluse: {formatMoney(service.commissionAmount)}.
                           </p>
                         </div>
-                        <div className="rounded-2xl bg-white px-4 py-3 text-right shadow-sm">
-                          <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Tarif public</p>
-                          <p className="mt-1 text-2xl font-black text-atlas">{formatMoney(service.pricePublic)}</p>
-                          <p className="text-xs text-slate-500">{unitLabels[service.unit]}</p>
+                        <div className="flex flex-col items-end gap-3">
+                          <div className="rounded-2xl bg-white px-4 py-3 text-right shadow-sm">
+                            <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Tarif public</p>
+                            <p className="mt-1 text-2xl font-black text-atlas">{formatMoney(service.pricePublic)}</p>
+                            <p className="text-xs text-slate-500">{unitLabels[service.unit]}</p>
+                          </div>
+                          <Link
+                            href={`/bookings/new?serviceId=${service.id}&serviceLabel=${encodeURIComponent(service.label)}&providerId=${provider.id}&providerName=${encodeURIComponent(provider.name)}&unit=${service.unit}&price=${service.pricePublic}`}
+                            className="rounded-full bg-warm px-5 py-3 text-sm font-semibold text-white transition hover:scale-[1.01]"
+                          >
+                            Reserver
+                          </Link>
                         </div>
                       </div>
                     </article>
@@ -128,22 +136,29 @@ export default async function ExperienceDetailPage({ params }: { params: { id: s
               </div>
             </div>
 
-            <aside className="rounded-[2rem] border border-slate-200 bg-white/80 p-6 shadow-sm md:p-8">
-              <p className="text-sm uppercase tracking-[0.18em] text-slate-500">Prochaine etape</p>
-              <h2 className="mt-3 text-3xl font-black text-atlas">Transformer la fiche en parcours de reservation</h2>
-              <p className="mt-4 text-sm leading-7 text-slate-600">
-                Le back-end expose deja la creation de bookings et les paiements Stripe. L'etape suivante cote web sera de brancher ces services sur une vraie interface de reservation pour passer du simple catalogue au checkout complet.
-              </p>
+            <aside className="rounded-[2rem] border border-atlas/20 bg-atlas p-6 shadow-xl text-white md:p-8">
+              <p className="text-sm uppercase tracking-[0.18em] text-white/70">Reserver une prestation</p>
+              <h2 className="mt-3 text-3xl font-black text-white">Comment ca marche</h2>
 
-              <div className="mt-6 grid gap-3">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Utilisation recommandee</p>
-                  <p className="mt-2 text-sm text-slate-700">Consulter la fiche, confirmer le service, puis basculer soit vers la reservation soit vers une demande sur mesure.</p>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Canal manuel actuel</p>
-                  <p className="mt-2 text-sm text-slate-700">La demande speciale reste le chemin le plus fiable tant que le booking flow web n'est pas encore branche.</p>
-                </div>
+              <ul className="mt-6 grid gap-3 text-sm text-white/85">
+                <li className="rounded-2xl border border-white/15 bg-white/10 p-4">
+                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-dune">Etape 1</span>
+                  <p className="mt-1">Choisissez un service et cliquez sur <strong>Reserver</strong>.</p>
+                </li>
+                <li className="rounded-2xl border border-white/15 bg-white/10 p-4">
+                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-dune">Etape 2</span>
+                  <p className="mt-1">Indiquez la date, le nombre de personnes et votre token d'acces.</p>
+                </li>
+                <li className="rounded-2xl border border-white/15 bg-white/10 p-4">
+                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-dune">Etape 3</span>
+                  <p className="mt-1">Confirmez — votre booking est cree instantanement et le paiement Stripe suit.</p>
+                </li>
+              </ul>
+
+              <div className="mt-6 flex flex-col gap-3">
+                <Link href="/special-request" className="rounded-full border border-white/25 px-5 py-3 text-center text-sm font-semibold text-white transition hover:bg-white/10">
+                  Demande sur mesure
+                </Link>
               </div>
             </aside>
           </section>
