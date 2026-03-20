@@ -8,6 +8,8 @@ const travelerTokenKey = "mwy_traveler_access_token";
 
 const navLinks = [
   { href: "/experiences", label: "Experiences" },
+  { href: "/group-trips", label: "Voyages de groupe" },
+  { href: "/itineraries/new", label: "Mon itineraire" },
   { href: "/special-request", label: "Demande speciale" },
   { href: "/bookings/status", label: "Mes reservations" }
 ];

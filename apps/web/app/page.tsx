@@ -65,7 +65,13 @@ export default function HomePage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Link href="/bookings/new" className="rounded-full border border-atlas px-4 py-2 text-sm font-semibold text-atlas hover:bg-atlas hover:text-white">
+            <Link href="/group-trips" className="rounded-full bg-warm px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
+              Voyages de groupe
+            </Link>
+            <Link href="/itineraries/new" className="rounded-full border border-atlas px-4 py-2 text-sm font-semibold text-atlas hover:bg-atlas hover:text-white">
+              Mon itineraire
+            </Link>
+            <Link href="/bookings/new" className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:border-atlas hover:text-atlas">
               Nouvelle reservation
             </Link>
             <Link href="/bookings/status" className="rounded-full bg-atlas px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
