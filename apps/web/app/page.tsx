@@ -46,6 +46,31 @@ export default function HomePage() {
             >
               Demander un travel planner
             </Link>
+            <Link
+              href="/auth/login"
+              className="rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-atlas hover:text-atlas"
+            >
+              Connexion voyageur
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      <section className="mt-6 rounded-3xl border border-slate-200 bg-white/75 p-5 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Parcours voyageur</p>
+            <p className="mt-2 text-sm text-slate-700">
+              Connectez-vous, reservez une experience, puis suivez le statut de votre booking.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <Link href="/bookings/new" className="rounded-full border border-atlas px-4 py-2 text-sm font-semibold text-atlas hover:bg-atlas hover:text-white">
+              Nouvelle reservation
+            </Link>
+            <Link href="/bookings/status" className="rounded-full bg-atlas px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
+              Suivi de reservation
+            </Link>
           </div>
         </div>
       </section>
