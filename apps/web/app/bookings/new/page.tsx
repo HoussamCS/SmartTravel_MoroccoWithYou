@@ -5,6 +5,7 @@ import { FormEvent, Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 type BookingState = "idle" | "loading" | "success" | "error";
+type PaymentState = "idle" | "loading" | "success" | "error";
 
 const apiBaseDefault = "http://localhost:4000/api/v1";
 
@@ -23,12 +24,21 @@ function BookingForm() {
   const [message, setMessage] = useState("");
   const [bookingId, setBookingId] = useState<string | null>(null);
   const [totalPrice, setTotalPrice] = useState<number | null>(null);
+  const [authToken, setAuthToken] = useState("");
+  const [paymentState, setPaymentState] = useState<PaymentState>("idle");
+  const [paymentMessage, setPaymentMessage] = useState("");
+  const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setState("loading");
     setMessage("");
     setBookingId(null);
+    setPaymentState("idle");
+    setPaymentMessage("");
+    setPaymentIntentId(null);
+    setClientSecret(null);
 
     const form = new FormData(event.currentTarget);
     const token = String(form.get("token") ?? "").trim();
@@ -65,10 +75,51 @@ function BookingForm() {
 
       setBookingId((data as { id: string }).id);
       setTotalPrice((data as { totalPrice: number }).totalPrice);
+      setAuthToken(token);
       setState("success");
     } catch (err) {
       setState("error");
       setMessage(err instanceof Error ? err.message : "Une erreur est survenue. Merci de reessayer.");
+    }
+  };
+
+  const createPaymentIntent = async () => {
+    if (!bookingId) {
+      return;
+    }
+
+    if (!authToken) {
+      setPaymentState("error");
+      setPaymentMessage("Token d'acces indisponible. Refaite la reservation depuis le formulaire.");
+      return;
+    }
+
+    setPaymentState("loading");
+    setPaymentMessage("");
+
+    try {
+      const response = await fetch(`${apiBase}/payments/intent`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "authorization": `Bearer ${authToken}`
+        },
+        body: JSON.stringify({ bookingId, currency: "mad" })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error((data as { message?: string }).message ?? "Erreur lors de la creation du payment intent.");
+      }
+
+      setPaymentIntentId((data as { paymentIntentId: string }).paymentIntentId);
+      setClientSecret((data as { clientSecret: string | null }).clientSecret ?? null);
+      setPaymentState("success");
+      setPaymentMessage("Payment intent cree. Vous pouvez maintenant connecter le checkout Stripe.");
+    } catch (err) {
+      setPaymentState("error");
+      setPaymentMessage(err instanceof Error ? err.message : "Creation du payment intent impossible.");
     }
   };
 
@@ -98,6 +149,14 @@ function BookingForm() {
           </div>
 
           <div className="mt-6 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={createPaymentIntent}
+              disabled={paymentState === "loading"}
+              className="rounded-full bg-atlas px-5 py-3 text-sm font-semibold text-white transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {paymentState === "loading" ? "Creation payment intent..." : "Creer payment intent"}
+            </button>
             <Link
               href={`/experiences/${providerId}`}
               className="rounded-full border border-emerald-900 px-5 py-3 text-sm font-semibold text-emerald-900"
@@ -111,6 +170,23 @@ function BookingForm() {
               Voir d&apos;autres experiences
             </Link>
           </div>
+
+          {paymentMessage ? (
+            <p className={`mt-4 text-sm ${paymentState === "error" ? "text-red-700" : "text-emerald-700"}`}>{paymentMessage}</p>
+          ) : null}
+
+          {paymentIntentId ? (
+            <div className="mt-4 grid gap-3 rounded-2xl border border-emerald-200 bg-white p-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.16em] text-slate-500">PaymentIntent ID</p>
+                <p className="mt-1 break-all font-mono text-xs font-semibold text-slate-900">{paymentIntentId}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Client Secret</p>
+                <p className="mt-1 break-all font-mono text-xs font-semibold text-slate-900">{clientSecret ?? "Non retourne"}</p>
+              </div>
+            </div>
+          ) : null}
         </section>
       </main>
     );
