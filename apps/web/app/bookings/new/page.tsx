@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, Suspense, useMemo, useState } from "react";
+import { FormEvent, Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 type BookingState = "idle" | "loading" | "success" | "error";
 type PaymentState = "idle" | "loading" | "success" | "error";
 
 const apiBaseDefault = "http://localhost:4000/api/v1";
+const travelerTokenKey = "mwy_traveler_access_token";
 
 function BookingForm() {
   const params = useSearchParams();
@@ -29,6 +30,15 @@ function BookingForm() {
   const [paymentMessage, setPaymentMessage] = useState("");
   const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [tokenInput, setTokenInput] = useState("");
+
+  useEffect(() => {
+    const storedToken = localStorage.getItem(travelerTokenKey);
+    if (storedToken) {
+      setTokenInput(storedToken);
+      setAuthToken(storedToken);
+    }
+  }, []);
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -41,7 +51,7 @@ function BookingForm() {
     setClientSecret(null);
 
     const form = new FormData(event.currentTarget);
-    const token = String(form.get("token") ?? "").trim();
+    const token = tokenInput.trim();
     const date = String(form.get("date") ?? "");
     const pax = Number(form.get("pax") ?? 1);
 
@@ -76,6 +86,7 @@ function BookingForm() {
       setBookingId((data as { id: string }).id);
       setTotalPrice((data as { totalPrice: number }).totalPrice);
       setAuthToken(token);
+      localStorage.setItem(travelerTokenKey, token);
       setState("success");
     } catch (err) {
       setState("error");
@@ -290,10 +301,16 @@ function BookingForm() {
                 rows={3}
                 required
                 placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                value={tokenInput}
+                onChange={(event) => setTokenInput(event.target.value)}
                 className="rounded-xl border border-slate-300 p-3 font-mono text-xs focus:border-atlas focus:outline-none"
               />
               <p className="text-xs text-slate-500">
-                Obtenez votre token via <code className="rounded bg-slate-100 px-1 font-mono">POST /api/v1/auth/login</code>.
+                Obtenez votre token via <code className="rounded bg-slate-100 px-1 font-mono">POST /api/v1/auth/login</code> ou utilisez la{" "}
+                <Link href="/auth/login" className="font-semibold text-atlas hover:underline">
+                  page de connexion voyageur
+                </Link>
+                .
               </p>
             </div>
 
