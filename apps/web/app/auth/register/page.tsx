@@ -88,7 +88,7 @@ export default function TravelerRegisterPage() {
             <li className="rounded-2xl border border-white/15 bg-white/10 p-4">3. Reservez et payez directement depuis la plateforme</li>
           </ul>
 
-          <p className="mt-6 text-sm text-white/70">
+          <p className="mt-8 border-t border-white/20 pt-6 text-sm text-white/70">
             Deja un compte ?{" "}
             <Link href="/auth/login" className="font-semibold text-dune hover:underline">
               Se connecter

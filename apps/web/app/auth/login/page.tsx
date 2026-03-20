@@ -82,6 +82,13 @@ export default function TravelerLoginPage() {
             <li className="rounded-2xl border border-white/15 bg-white/10 p-4">2. Le token JWT est enregistre localement</li>
             <li className="rounded-2xl border border-white/15 bg-white/10 p-4">3. Les formulaires de reservation se remplissent automatiquement</li>
           </ul>
+
+          <p className="mt-6 text-sm text-white/70">
+            Pas encore de compte ?{" "}
+            <Link href="/auth/register" className="font-semibold text-dune hover:underline">
+              S&apos;inscrire
+            </Link>
+          </p>
         </div>
 
         <section className="rounded-[2rem] border border-atlas/20 bg-white/85 p-6 shadow-xl backdrop-blur md:p-8">
