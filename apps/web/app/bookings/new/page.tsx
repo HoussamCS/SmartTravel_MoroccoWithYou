@@ -169,6 +169,12 @@ function BookingForm() {
               {paymentState === "loading" ? "Creation payment intent..." : "Creer payment intent"}
             </button>
             <Link
+              href={`/payments/checkout?bookingId=${bookingId}`}
+              className="rounded-full bg-warm px-5 py-3 text-sm font-semibold text-white transition hover:scale-[1.01]"
+            >
+              Payer maintenant
+            </Link>
+            <Link
               href={`/experiences/${providerId}`}
               className="rounded-full border border-emerald-900 px-5 py-3 text-sm font-semibold text-emerald-900"
             >
