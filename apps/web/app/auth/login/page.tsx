@@ -13,7 +13,6 @@ export default function TravelerLoginPage() {
   const [state, setState] = useState<LoginState>("idle");
   const [message, setMessage] = useState("");
   const [email, setEmail] = useState("");
-  const [tokenPreview, setTokenPreview] = useState<string | null>(null);
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -46,10 +45,9 @@ export default function TravelerLoginPage() {
       }
 
       localStorage.setItem(travelerTokenKey, token);
-      setTokenPreview(`${token.slice(0, 20)}...${token.slice(-10)}`);
       setEmail(payload.email);
       setState("success");
-      setMessage("Connexion reussie. Votre token voyageur est enregistre pour les reservations.");
+  setMessage("Connexion reussie. Votre espace voyageur est pret.");
       event.currentTarget.reset();
     } catch (error) {
       setState("error");
@@ -73,14 +71,10 @@ export default function TravelerLoginPage() {
           <h1 className="mt-4 text-3xl font-black leading-tight md:text-4xl">
             Connectez-vous une fois, reservez plus vite.
           </h1>
-          <p className="mt-4 text-sm leading-7 text-white/85">
-            Cette connexion stocke votre access token localement dans le navigateur pour eviter de le copier/coller sur chaque booking.
-          </p>
 
           <ul className="mt-6 grid gap-3 text-sm text-white/85">
             <li className="rounded-2xl border border-white/15 bg-white/10 p-4">1. Entrez votre email et mot de passe</li>
-            <li className="rounded-2xl border border-white/15 bg-white/10 p-4">2. Le token JWT est enregistre localement</li>
-            <li className="rounded-2xl border border-white/15 bg-white/10 p-4">3. Les formulaires de reservation se remplissent automatiquement</li>
+            <li className="rounded-2xl border border-white/15 bg-white/10 p-4">2. Retrouvez plus vite vos reservations et demandes</li>
           </ul>
 
           <p className="mt-6 text-sm text-white/70">
@@ -93,9 +87,7 @@ export default function TravelerLoginPage() {
 
         <section className="rounded-[2rem] border border-atlas/20 bg-white/85 p-6 shadow-xl backdrop-blur md:p-8">
           <h2 className="text-2xl font-black text-atlas">Connexion</h2>
-          <p className="mt-2 text-sm text-slate-700">
-            Utilisez un compte voyageur cree via l'API d'authentification.
-          </p>
+          <p className="mt-2 text-sm text-slate-700">Connectez-vous avec votre compte voyageur.</p>
 
           <form onSubmit={onSubmit} className="mt-6 grid gap-4">
             <div className="grid gap-1">
@@ -138,7 +130,6 @@ export default function TravelerLoginPage() {
             <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
               <p className="text-xs uppercase tracking-[0.16em] text-emerald-700">Session active</p>
               <p className="mt-2 text-sm text-emerald-900">Compte: {email}</p>
-              <p className="mt-1 break-all font-mono text-xs text-emerald-900">Token: {tokenPreview}</p>
               <div className="mt-4 flex flex-wrap gap-3">
                 <Link href="/experiences" className="rounded-full bg-atlas px-4 py-2 text-xs font-semibold text-white">Aller au catalogue</Link>
                 <Link href="/bookings/new" className="rounded-full border border-atlas px-4 py-2 text-xs font-semibold text-atlas">Aller a la reservation</Link>

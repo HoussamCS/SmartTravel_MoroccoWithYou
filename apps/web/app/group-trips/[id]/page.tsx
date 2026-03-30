@@ -35,10 +35,7 @@ export default function GroupTripJoinPage() {
   const [result, setResult] = useState<{ id: string; totalPrice: number } | null>(null);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    const stored = localStorage.getItem("mwy_traveler_access_token") ?? "";
-    setToken(stored);
-
+  const fetchTrip = () => {
     fetch(`${API}/api/v1/group-trips`)
       .then((r) => r.json())
       .then((trips: GroupTrip[]) => {
@@ -47,6 +44,16 @@ export default function GroupTripJoinPage() {
       })
       .catch(() => setTrip(null))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    const stored = localStorage.getItem("mwy_traveler_access_token") ?? "";
+    setToken(stored);
+    fetchTrip();
+
+    // Real-time polling every 30 seconds (MVP requirement)
+    const interval = setInterval(fetchTrip, 30_000);
+    return () => clearInterval(interval);
   }, [id]);
 
   async function handleJoin(e: React.FormEvent) {

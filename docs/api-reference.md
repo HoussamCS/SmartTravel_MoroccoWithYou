@@ -25,6 +25,7 @@ Base URL: `/api/v1`
 ## Bookings
 
 - `POST /bookings`: create booking and compute total/commission
+- `GET /bookings`: list traveler bookings (owner-scoped unless admin)
 - `GET /bookings/:id`: get booking status
 
 ## Itineraries
@@ -40,8 +41,15 @@ Base URL: `/api/v1`
 
 ## Admin
 
+- `GET /admin/group-trips`: list group trips for back-office CRUD
+- `POST /admin/group-trips`: create a group trip
+- `PUT /admin/group-trips/:id`: update a group trip
+- `DELETE /admin/group-trips/:id`: delete a group trip
 - `POST /admin/providers`: create provider (auth required)
+- `POST /admin/uploads`: upload a media file to R2/S3 (MIME + 10MB validation)
+- `PUT /admin/providers/:id/photos`: replace provider photos with uploaded URLs
 - `GET /admin/commissions`: grouped commission report (auth required)
+- `GET /admin/commissions/export.csv`: CSV export of filtered commission bookings
 - `POST /admin/commissions/report`: enqueue monthly commission report job
 - `POST /admin/commissions/report/schedule`: schedule next monthly commission job
 - `GET /admin/jobs/logs`: list worker execution logs

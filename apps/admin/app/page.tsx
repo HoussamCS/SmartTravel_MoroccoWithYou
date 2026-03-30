@@ -2,9 +2,11 @@ import Link from "next/link";
 
 const cards = [
   { title: "Prestataires", metric: "CRUD", hint: "gestion catalogue", href: "/providers" },
-  { title: "Reservations", metric: "Paiement", hint: "status webhook stripe", href: "/commissions" },
+  { title: "Itinéraires", metric: "Builder", hint: "planification voyages sur mesure", href: "/itineraries" },
+  { title: "Utilisateurs", metric: "Gestion", hint: "liste, suspension, historique", href: "/users" },
   { title: "Commissions", metric: "Rapports", hint: "jobs BullMQ", href: "/commissions" },
-  { title: "Demandes Speciales", metric: "Inbox", hint: "event requests", href: "/event-requests" }
+  { title: "Voyages de groupe", metric: "CRUD", hint: "gestion des départs", href: "/group-trips" },
+  { title: "Demandes Spéciales", metric: "Inbox", hint: "event requests", href: "/event-requests" },
 ];
 
 export default function AdminPage() {

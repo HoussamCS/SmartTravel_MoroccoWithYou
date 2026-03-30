@@ -1,5 +1,6 @@
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
+import multipart from "@fastify/multipart";
 import rateLimit from "@fastify/rate-limit";
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
@@ -13,6 +14,7 @@ import Stripe from "stripe";
 import { z } from "zod";
 import { deleteByPattern, getJsonCache, setJsonCache } from "./cache/redis.js";
 import { bookingEmailQueue, commissionReportQueue } from "./jobs/queues.js";
+import { uploadToR2 } from "./lib/s3.js";
 
 const env = appEnvSchema.parse(process.env);
 
@@ -188,6 +190,7 @@ await app.register(fastifyRawBody, {
   runFirst: true,
   routes: ["/api/v1/stripe/webhook"]
 });
+await app.register(multipart, { limits: { fileSize: 10 * 1024 * 1024 } });
 
 app.get("/api/health", async () => ({ ok: true, service: "smarttravel-api" }));
 
@@ -292,7 +295,7 @@ app.post("/api/v1/auth/logout", async (_request, reply) => {
 
 app.get("/api/v1/auth/me", async (request, reply) => {
   try {
-    const claims = requireAuth(request);
+    const claims = await requireAuth(request);
     return claims;
   } catch (error) {
     const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
@@ -368,7 +371,7 @@ app.get("/api/v1/providers/:id", async (request, reply) => {
 app.post("/api/v1/bookings", async (request, reply) => {
   let claims: AuthClaims;
   try {
-    claims = requireAuth(request);
+    claims = await requireAuth(request);
   } catch (error) {
     const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
     return reply.code(statusCode).send({ message: (error as Error).message });
@@ -414,7 +417,7 @@ app.post("/api/v1/bookings", async (request, reply) => {
 app.get("/api/v1/bookings/:id", async (request, reply) => {
   let claims: AuthClaims;
   try {
-    claims = requireAuth(request);
+    claims = await requireAuth(request);
   } catch (error) {
     const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
     return reply.code(statusCode).send({ message: (error as Error).message });
@@ -441,10 +444,69 @@ app.get("/api/v1/bookings/:id", async (request, reply) => {
   };
 });
 
+app.get("/api/v1/bookings", async (request, reply) => {
+  let claims: AuthClaims;
+  try {
+    claims = await requireAuth(request);
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
+    return reply.code(statusCode).send({ message: (error as Error).message });
+  }
+
+  const query = z
+    .object({
+      status: z.enum(["PENDING", "CONFIRMED", "CANCELLED"]).optional(),
+      page: z.coerce.number().int().positive().default(1),
+      pageSize: z.coerce.number().int().positive().max(50).default(10)
+    })
+    .parse(request.query);
+
+  const skip = (query.page - 1) * query.pageSize;
+  const where: Prisma.BookingWhereInput = {
+    ...(claims.role === "ADMIN" ? {} : { userId: claims.sub }),
+    ...(query.status ? { status: query.status } : {})
+  };
+
+  const [total, rows] = await Promise.all([
+    prisma.booking.count({ where }),
+    prisma.booking.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: query.pageSize,
+      include: {
+        service: {
+          select: {
+            label: true,
+            provider: {
+              select: {
+                name: true
+              }
+            }
+          }
+        }
+      }
+    })
+  ]);
+
+  return {
+    page: query.page,
+    pageSize: query.pageSize,
+    total,
+    data: rows.map((row) => ({
+      ...row,
+      totalPrice: toNumber(row.totalPrice),
+      commissionTotal: toNumber(row.commissionTotal),
+      serviceLabel: row.service.label,
+      providerName: row.service.provider.name
+    }))
+  };
+});
+
 app.post("/api/v1/payments/intent", async (request, reply) => {
   let claims: AuthClaims;
   try {
-    claims = requireAuth(request);
+    claims = await requireAuth(request);
   } catch (error) {
     const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
     return reply.code(statusCode).send({ message: (error as Error).message });
@@ -543,7 +605,7 @@ app.post("/api/v1/stripe/webhook", async (request, reply) => {
 app.post("/api/v1/itineraries", async (request, reply) => {
   let claims: AuthClaims;
   try {
-    claims = requireAuth(request);
+    claims = await requireAuth(request);
   } catch (error) {
     const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
     return reply.code(statusCode).send({ message: (error as Error).message });
@@ -576,7 +638,7 @@ app.post("/api/v1/itineraries", async (request, reply) => {
 app.get("/api/v1/itineraries/:id", async (request, reply) => {
   let claims: AuthClaims;
   try {
-    claims = requireAuth(request);
+    claims = await requireAuth(request);
   } catch (error) {
     const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
     return reply.code(statusCode).send({ message: (error as Error).message });
@@ -605,7 +667,7 @@ app.get("/api/v1/itineraries/:id", async (request, reply) => {
 app.post("/api/v1/itineraries/:id/validate", async (request, reply) => {
   let claims: AuthClaims;
   try {
-    claims = requireAuth(request);
+    claims = await requireAuth(request);
   } catch (error) {
     const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
     return reply.code(statusCode).send({ message: (error as Error).message });
@@ -655,7 +717,7 @@ app.get("/api/v1/group-trips", async () => {
 app.post("/api/v1/group-trips/:id/join", async (request, reply) => {
   let claims: AuthClaims;
   try {
-    claims = requireAuth(request);
+    claims = await requireAuth(request);
   } catch (error) {
     const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
     return reply.code(statusCode).send({ message: (error as Error).message });
@@ -706,6 +768,135 @@ app.post("/api/v1/group-trips/:id/join", async (request, reply) => {
     }
 
     return reply.code(500).send({ message: "Failed to join trip" });
+  }
+});
+
+app.get("/api/v1/admin/group-trips", async (request, reply) => {
+  try {
+    requireAdminAccess(request);
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
+    return reply.code(statusCode).send({ message: (error as Error).message });
+  }
+
+  const trips = await prisma.groupTrip.findMany({
+    include: { joins: { select: { pax: true } } },
+    orderBy: { startDate: "asc" }
+  });
+
+  return trips.map((trip) => {
+    const occupied = trip.joins.reduce((sum, item) => sum + item.pax, 0);
+    return {
+      ...trip,
+      pricePerPerson: toNumber(trip.pricePerPerson),
+      seatsRemaining: Math.max(trip.maxCapacity - occupied, 0)
+    };
+  });
+});
+
+app.post("/api/v1/admin/group-trips", async (request, reply) => {
+  try {
+    requireAdminAccess(request);
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
+    return reply.code(statusCode).send({ message: (error as Error).message });
+  }
+
+  const body = z
+    .object({
+      title: z.string().min(2),
+      destination: z.string().min(2),
+      startDate: z.string(),
+      endDate: z.string(),
+      maxCapacity: z.number().int().positive(),
+      pricePerPerson: z.number().positive(),
+      program: z.array(z.unknown()).default([])
+    })
+    .parse(request.body);
+
+  const trip = await prisma.groupTrip.create({
+    data: {
+      title: body.title,
+      destination: body.destination,
+      startDate: new Date(body.startDate),
+      endDate: new Date(body.endDate),
+      maxCapacity: body.maxCapacity,
+      pricePerPerson: body.pricePerPerson,
+      program: body.program as Prisma.InputJsonValue
+    }
+  });
+
+  return reply.code(201).send({
+    ...trip,
+    pricePerPerson: toNumber(trip.pricePerPerson),
+    seatsRemaining: trip.maxCapacity
+  });
+});
+
+app.put("/api/v1/admin/group-trips/:id", async (request, reply) => {
+  try {
+    requireAdminAccess(request);
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
+    return reply.code(statusCode).send({ message: (error as Error).message });
+  }
+
+  const params = z.object({ id: z.string().uuid() }).parse(request.params);
+  const body = z
+    .object({
+      title: z.string().min(2).optional(),
+      destination: z.string().min(2).optional(),
+      startDate: z.string().optional(),
+      endDate: z.string().optional(),
+      maxCapacity: z.number().int().positive().optional(),
+      pricePerPerson: z.number().positive().optional(),
+      program: z.array(z.unknown()).optional()
+    })
+    .parse(request.body);
+
+  const data: Prisma.GroupTripUpdateInput = {
+    ...(body.title ? { title: body.title } : {}),
+    ...(body.destination ? { destination: body.destination } : {}),
+    ...(body.startDate ? { startDate: new Date(body.startDate) } : {}),
+    ...(body.endDate ? { endDate: new Date(body.endDate) } : {}),
+    ...(body.maxCapacity !== undefined ? { maxCapacity: body.maxCapacity } : {}),
+    ...(body.pricePerPerson !== undefined ? { pricePerPerson: body.pricePerPerson } : {}),
+    ...(body.program ? { program: body.program as Prisma.InputJsonValue } : {})
+  };
+
+  try {
+    const trip = await prisma.groupTrip.update({
+      where: { id: params.id },
+      data,
+      include: { joins: { select: { pax: true } } }
+    });
+
+    const occupied = trip.joins.reduce((sum, item) => sum + item.pax, 0);
+    return reply.code(200).send({
+      ...trip,
+      pricePerPerson: toNumber(trip.pricePerPerson),
+      seatsRemaining: Math.max(trip.maxCapacity - occupied, 0)
+    });
+  } catch {
+    return reply.code(404).send({ message: "Group trip not found" });
+  }
+});
+
+app.delete("/api/v1/admin/group-trips/:id", async (request, reply) => {
+  try {
+    requireAdminAccess(request);
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
+    return reply.code(statusCode).send({ message: (error as Error).message });
+  }
+
+  const params = z.object({ id: z.string().uuid() }).parse(request.params);
+
+  try {
+    await prisma.groupTrip.delete({ where: { id: params.id } });
+    return reply.code(204).send();
+  } catch {
+    return reply.code(404).send({ message: "Group trip not found" });
   }
 });
 
@@ -793,6 +984,22 @@ app.delete("/api/v1/admin/providers/:id", async (request, reply) => {
   }
 });
 
+const commissionQuerySchema = z.object({
+  month: z.string().regex(/^\d{4}-\d{2}$/).optional(),
+  providerId: z.string().uuid().optional()
+});
+
+const resolveMonthBounds = (month?: string): { start?: Date; end?: Date } => {
+  if (!month) {
+    return {};
+  }
+
+  const start = new Date(`${month}-01T00:00:00.000Z`);
+  const end = new Date(start);
+  end.setUTCMonth(end.getUTCMonth() + 1);
+  return { start, end };
+};
+
 app.get("/api/v1/admin/commissions", async (request, reply) => {
   try {
     requireAdminAccess(request);
@@ -801,7 +1008,28 @@ app.get("/api/v1/admin/commissions", async (request, reply) => {
     return reply.code(statusCode).send({ message: (error as Error).message });
   }
 
+  const query = commissionQuerySchema.parse(request.query);
+  const { start, end } = resolveMonthBounds(query.month);
+
   const records = await prisma.booking.findMany({
+    where: {
+      status: "CONFIRMED",
+      ...(start && end
+        ? {
+            createdAt: {
+              gte: start,
+              lt: end
+            }
+          }
+        : {}),
+      ...(query.providerId
+        ? {
+            service: {
+              providerId: query.providerId
+            }
+          }
+        : {})
+    },
     include: {
       service: {
         select: {
@@ -832,6 +1060,100 @@ app.get("/api/v1/admin/commissions", async (request, reply) => {
   );
 
   return Object.values(grouped);
+});
+
+app.get("/api/v1/admin/commissions/export.csv", async (request, reply) => {
+  try {
+    requireAdminAccess(request);
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
+    return reply.code(statusCode).send({ message: (error as Error).message });
+  }
+
+  const query = commissionQuerySchema.parse(request.query);
+  const { start, end } = resolveMonthBounds(query.month);
+
+  const bookings = await prisma.booking.findMany({
+    where: {
+      status: "CONFIRMED",
+      ...(start && end
+        ? {
+            createdAt: {
+              gte: start,
+              lt: end
+            }
+          }
+        : {}),
+      ...(query.providerId
+        ? {
+            service: {
+              providerId: query.providerId
+            }
+          }
+        : {})
+    },
+    include: {
+      service: {
+        select: {
+          label: true,
+          providerId: true,
+          provider: {
+            select: { name: true }
+          }
+        }
+      }
+    },
+    orderBy: { createdAt: "desc" }
+  });
+
+  const escapeCsv = (value: string | number): string => {
+    const text = String(value ?? "");
+    if (text.includes(",") || text.includes('"') || text.includes("\n")) {
+      return `"${text.replace(/"/g, '""')}"`;
+    }
+    return text;
+  };
+
+  const header = [
+    "booking_id",
+    "provider_id",
+    "provider_name",
+    "service_label",
+    "created_at",
+    "pax",
+    "total_price_mad",
+    "commission_total_mad",
+    "status"
+  ];
+
+  const lines = [header.join(",")];
+  for (const booking of bookings) {
+    lines.push(
+      [
+        booking.id,
+        booking.service.providerId,
+        booking.service.provider.name,
+        booking.service.label,
+        booking.createdAt.toISOString(),
+        booking.pax,
+        toNumber(booking.totalPrice).toFixed(2),
+        toNumber(booking.commissionTotal).toFixed(2),
+        booking.status
+      ]
+        .map(escapeCsv)
+        .join(",")
+    );
+  }
+
+  const totalCommission = bookings.reduce((sum, item) => sum + toNumber(item.commissionTotal), 0);
+  lines.push(["TOTAL", "", "", "", "", "", "", totalCommission.toFixed(2), ""].join(","));
+
+  const monthPart = query.month ?? "all";
+  const providerPart = query.providerId ?? "all";
+
+  reply.header("content-type", "text/csv; charset=utf-8");
+  reply.header("content-disposition", `attachment; filename=commissions-${monthPart}-${providerPart}.csv`);
+  return reply.send(lines.join("\n"));
 });
 
 app.post("/api/v1/admin/commissions/report", async (request, reply) => {
@@ -981,6 +1303,406 @@ app.get("/api/v1/admin/event-requests", async (request, reply) => {
   }
 });
 
+// ─── S3/R2 Upload ────────────────────────────────────────────────────────────
+app.post("/api/v1/admin/uploads", async (request, reply) => {
+  try {
+    requireAdminAccess(request);
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
+    return reply.code(statusCode).send({ message: (error as Error).message });
+  }
+
+  if (!env.R2_ENDPOINT || !env.R2_ACCESS_KEY_ID || !env.R2_SECRET_ACCESS_KEY || !env.R2_BUCKET || !env.R2_PUBLIC_URL) {
+    return reply.code(503).send({ message: "S3/R2 storage is not configured on this server." });
+  }
+
+  const data = await request.file();
+  if (!data) {
+    return reply.code(400).send({ message: "No file uploaded." });
+  }
+
+  const buffer = await data.toBuffer();
+
+  try {
+    const result = await uploadToR2({
+      buffer,
+      mimeType: data.mimetype,
+      originalName: data.filename,
+      r2Endpoint: env.R2_ENDPOINT,
+      r2AccessKeyId: env.R2_ACCESS_KEY_ID,
+      r2SecretAccessKey: env.R2_SECRET_ACCESS_KEY,
+      r2Bucket: env.R2_BUCKET,
+      r2PublicUrl: env.R2_PUBLIC_URL,
+    });
+    return reply.code(201).send(result);
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 500;
+    return reply.code(statusCode).send({ message: (error as Error).message });
+  }
+});
+
+// ─── Full-Text Provider Search ────────────────────────────────────────────────
+// This endpoint replaces the ILIKE fallback with PostgreSQL tsvector when a search term is present
+app.get("/api/v1/providers/search", async (request) => {
+  const query = providerFiltersSchema.parse(request.query);
+  const skip = (query.page - 1) * query.pageSize;
+
+  if (!query.q) {
+    // Fall through to the main providers endpoint logic
+    const where: Prisma.ProviderWhereInput = {
+      isActive: true,
+      ...(query.city ? { city: { equals: query.city, mode: "insensitive" } } : {}),
+      ...(query.category ? { category: query.category } : {}),
+    };
+    const [data, total] = await Promise.all([
+      prisma.provider.findMany({ where, skip, take: query.pageSize, orderBy: { createdAt: "desc" } }),
+      prisma.provider.count({ where }),
+    ]);
+    return { page: query.page, pageSize: query.pageSize, total, data };
+  }
+
+  // Full-text search via raw SQL tsvector
+  const tsquery = query.q.trim().split(/\s+/).filter(Boolean).join(" & ");
+  const categoryFilter = query.category ? Prisma.sql`AND p.category = ${query.category}::\"ProviderCategory\"` : Prisma.sql``;
+  const cityFilter = query.city ? Prisma.sql`AND LOWER(p.city) = LOWER(${query.city})` : Prisma.sql``;
+
+  const results = await prisma.$queryRaw<Array<{ id: string; name: string; city: string; category: string; description: string; location: unknown; photos: string[]; isActive: boolean; createdAt: Date; updatedAt: Date }>>(
+    Prisma.sql`
+      SELECT p.id, p.name, p.city, p.category, p.description, p.location, p.photos, p."isActive", p."createdAt", p."updatedAt"
+      FROM "Provider" p
+      WHERE p."isActive" = true
+        AND to_tsvector('french', p.name || ' ' || p.description) @@ to_tsquery('french', ${tsquery})
+        ${categoryFilter}
+        ${cityFilter}
+      ORDER BY ts_rank(to_tsvector('french', p.name || ' ' || p.description), to_tsquery('french', ${tsquery})) DESC
+      LIMIT ${query.pageSize} OFFSET ${skip}
+    `
+  );
+
+  const countResult = await prisma.$queryRaw<Array<{ count: bigint }>>(
+    Prisma.sql`
+      SELECT COUNT(*) as count
+      FROM "Provider" p
+      WHERE p."isActive" = true
+        AND to_tsvector('french', p.name || ' ' || p.description) @@ to_tsquery('french', ${tsquery})
+        ${categoryFilter}
+        ${cityFilter}
+    `
+  );
+
+  const total = Number(countResult[0]?.count ?? 0);
+  return { page: query.page, pageSize: query.pageSize, total, data: results };
+});
+
+// ─── Public Itinerary (no auth) ───────────────────────────────────────────────
+app.get("/api/v1/itineraries/public/:id", async (request, reply) => {
+  const params = z.object({ id: z.string().uuid() }).parse(request.params);
+  const itinerary = await prisma.itinerary.findUnique({ where: { id: params.id } });
+
+  if (!itinerary) {
+    return reply.code(404).send({ message: "Itinerary not found" });
+  }
+
+  // Return safe read-only fields (no user PII)
+  return {
+    id: itinerary.id,
+    title: itinerary.title,
+    status: itinerary.status,
+    days: itinerary.days,
+    totalPrice: toNumber(itinerary.totalPrice),
+    createdAt: itinerary.createdAt,
+  };
+});
+
+// ─── Admin: Update Itinerary Days (Builder Save) ─────────────────────────────
+app.put("/api/v1/admin/itineraries/:id/days", async (request, reply) => {
+  try {
+    requireAdminAccess(request);
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
+    return reply.code(statusCode).send({ message: (error as Error).message });
+  }
+
+  const params = z.object({ id: z.string().uuid() }).parse(request.params);
+  const body = z.object({
+    days: z.array(z.unknown()),
+    totalPrice: z.number().nonnegative().optional(),
+    status: z.enum(["DRAFT", "SENT", "VALIDATED", "BOOKED"]).optional(),
+  }).parse(request.body);
+
+  try {
+    const updated = await prisma.itinerary.update({
+      where: { id: params.id },
+      data: {
+        days: body.days as Prisma.InputJsonValue,
+        ...(body.totalPrice !== undefined ? { totalPrice: body.totalPrice } : {}),
+        ...(body.status ? { status: body.status } : {}),
+      },
+    });
+    return reply.code(200).send({ ...updated, totalPrice: toNumber(updated.totalPrice) });
+  } catch {
+    return reply.code(404).send({ message: "Itinerary not found" });
+  }
+});
+
+// Admin: List all itineraries
+app.get("/api/v1/admin/itineraries", async (request, reply) => {
+  try {
+    requireAdminAccess(request);
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
+    return reply.code(statusCode).send({ message: (error as Error).message });
+  }
+
+  const query = z.object({
+    status: z.enum(["DRAFT", "SENT", "VALIDATED", "BOOKED"]).optional(),
+    page: z.coerce.number().int().positive().default(1),
+    pageSize: z.coerce.number().int().positive().max(50).default(20),
+  }).parse(request.query);
+
+  const skip = (query.page - 1) * query.pageSize;
+  const where = query.status ? { status: query.status } : {};
+
+  const [itineraries, total] = await Promise.all([
+    prisma.itinerary.findMany({
+      where,
+      skip,
+      take: query.pageSize,
+      orderBy: { updatedAt: "desc" },
+      include: { user: { select: { email: true, profile: true } } },
+    }),
+    prisma.itinerary.count({ where }),
+  ]);
+
+  return {
+    page: query.page,
+    pageSize: query.pageSize,
+    total,
+    data: itineraries.map((it) => ({ ...it, totalPrice: toNumber(it.totalPrice) })),
+  };
+});
+
+// Admin: Get single itinerary with services detail
+app.get("/api/v1/admin/itineraries/:id", async (request, reply) => {
+  try {
+    requireAdminAccess(request);
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
+    return reply.code(statusCode).send({ message: (error as Error).message });
+  }
+
+  const params = z.object({ id: z.string().uuid() }).parse(request.params);
+  const itinerary = await prisma.itinerary.findUnique({
+    where: { id: params.id },
+    include: { user: { select: { email: true, profile: true } } },
+  });
+
+  if (!itinerary) {
+    return reply.code(404).send({ message: "Itinerary not found" });
+  }
+
+  return { ...itinerary, totalPrice: toNumber(itinerary.totalPrice) };
+});
+
+// ─── Admin: User Management ───────────────────────────────────────────────────
+app.get("/api/v1/admin/users", async (request, reply) => {
+  try {
+    requireAdminAccess(request);
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
+    return reply.code(statusCode).send({ message: (error as Error).message });
+  }
+
+  const query = z.object({
+    page: z.coerce.number().int().positive().default(1),
+    pageSize: z.coerce.number().int().positive().max(100).default(25),
+    role: z.enum(["TRAVELER", "ADMIN"]).optional(),
+    q: z.string().optional(),
+  }).parse(request.query);
+
+  const skip = (query.page - 1) * query.pageSize;
+  const where: Prisma.UserWhereInput = {
+    ...(query.role ? { role: query.role } : {}),
+    ...(query.q ? { email: { contains: query.q, mode: "insensitive" } } : {}),
+  };
+
+  const [users, total] = await Promise.all([
+    prisma.user.findMany({
+      where,
+      skip,
+      take: query.pageSize,
+      orderBy: { createdAt: "desc" },
+      select: { id: true, email: true, role: true, profile: true, createdAt: true, _count: { select: { bookings: true } } },
+    }),
+    prisma.user.count({ where }),
+  ]);
+
+  return { page: query.page, pageSize: query.pageSize, total, data: users };
+});
+
+app.put("/api/v1/admin/users/:id/suspend", async (request, reply) => {
+  try {
+    requireAdminAccess(request);
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
+    return reply.code(statusCode).send({ message: (error as Error).message });
+  }
+
+  const params = z.object({ id: z.string().uuid() }).parse(request.params);
+  const body = z.object({ suspended: z.boolean() }).parse(request.body);
+
+  try {
+    const user = await prisma.user.update({
+      where: { id: params.id },
+      data: {
+        profile: {
+          suspended: body.suspended,
+          suspendedAt: body.suspended ? new Date().toISOString() : null,
+        },
+      },
+      select: { id: true, email: true, role: true, profile: true },
+    });
+    return reply.code(200).send(user);
+  } catch {
+    return reply.code(404).send({ message: "User not found" });
+  }
+});
+
+app.get("/api/v1/admin/users/:id/bookings", async (request, reply) => {
+  try {
+    requireAdminAccess(request);
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
+    return reply.code(statusCode).send({ message: (error as Error).message });
+  }
+
+  const params = z.object({ id: z.string().uuid() }).parse(request.params);
+
+  const bookings = await prisma.booking.findMany({
+    where: { userId: params.id },
+    include: { service: { include: { provider: { select: { name: true, city: true } } } } },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return bookings.map((b) => ({
+    ...b,
+    totalPrice: toNumber(b.totalPrice),
+    commissionTotal: toNumber(b.commissionTotal),
+  }));
+});
+
+// Admin: Update provider photos (after upload)
+app.put("/api/v1/admin/providers/:id/photos", async (request, reply) => {
+  try {
+    requireAdminAccess(request);
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
+    return reply.code(statusCode).send({ message: (error as Error).message });
+  }
+
+  const params = z.object({ id: z.string().uuid() }).parse(request.params);
+  const body = z.object({ photos: z.array(z.string().url()) }).parse(request.body);
+
+  try {
+    const provider = await prisma.provider.update({
+      where: { id: params.id },
+      data: { photos: body.photos },
+    });
+    await deleteByPattern("providers:*");
+    return reply.code(200).send(provider);
+  } catch {
+    return reply.code(404).send({ message: "Provider not found" });
+  }
+});
+
+// Admin: Add/manage services for a provider
+app.post("/api/v1/admin/providers/:id/services", async (request, reply) => {
+  try {
+    requireAdminAccess(request);
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
+    return reply.code(statusCode).send({ message: (error as Error).message });
+  }
+
+  const params = z.object({ id: z.string().uuid() }).parse(request.params);
+  const body = z.object({
+    label: z.string().min(1),
+    pricePublic: z.number().positive(),
+    commissionAmount: z.number().nonnegative(),
+    unit: z.enum(["PER_PERSON", "FLAT"]),
+  }).parse(request.body);
+
+  const provider = await prisma.provider.findUnique({ where: { id: params.id } });
+  if (!provider) return reply.code(404).send({ message: "Provider not found" });
+
+  const service = await prisma.service.create({
+    data: { providerId: params.id, ...body },
+  });
+  await deleteByPattern("providers:*");
+  return reply.code(201).send(service);
+});
+
+app.put("/api/v1/admin/services/:id", async (request, reply) => {
+  try {
+    requireAdminAccess(request);
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
+    return reply.code(statusCode).send({ message: (error as Error).message });
+  }
+
+  const params = z.object({ id: z.string().uuid() }).parse(request.params);
+  const body = z.object({
+    label: z.string().min(1).optional(),
+    pricePublic: z.number().positive().optional(),
+    commissionAmount: z.number().nonnegative().optional(),
+    unit: z.enum(["PER_PERSON", "FLAT"]).optional(),
+  }).parse(request.body);
+
+  try {
+    const service = await prisma.service.update({ where: { id: params.id }, data: body });
+    await deleteByPattern("providers:*");
+    return reply.code(200).send(service);
+  } catch {
+    return reply.code(404).send({ message: "Service not found" });
+  }
+});
+
+app.delete("/api/v1/admin/services/:id", async (request, reply) => {
+  try {
+    requireAdminAccess(request);
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? 401;
+    return reply.code(statusCode).send({ message: (error as Error).message });
+  }
+
+  const params = z.object({ id: z.string().uuid() }).parse(request.params);
+
+  try {
+    await prisma.service.delete({ where: { id: params.id } });
+    await deleteByPattern("providers:*");
+    return reply.code(204).send();
+  } catch {
+    return reply.code(404).send({ message: "Service not found" });
+  }
+});
+
+try {
+  await commissionReportQueue.add(
+    "monthly-commission-report",
+    {
+      month: "AUTO"
+    },
+    {
+      jobId: "monthly-commission-report-auto",
+      repeat: {
+        pattern: "5 0 1 * *"
+      }
+    }
+  );
+} catch (error) {
+  app.log.warn({ err: error }, "Failed to ensure monthly commission auto scheduler");
+}
+
 const start = async () => {
   try {
     await app.listen({ port: 4000, host: "0.0.0.0" });
@@ -992,3 +1714,4 @@ const start = async () => {
 };
 
 await start();
+

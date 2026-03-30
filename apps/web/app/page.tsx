@@ -74,8 +74,8 @@ export default function HomePage() {
             <Link href="/bookings/new" className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:border-atlas hover:text-atlas">
               Nouvelle reservation
             </Link>
-            <Link href="/bookings/status" className="rounded-full bg-atlas px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
-              Suivi de reservation
+            <Link href="/bookings" className="rounded-full bg-atlas px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
+              Mes reservations
             </Link>
           </div>
         </div>

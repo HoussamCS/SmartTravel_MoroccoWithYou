@@ -33,22 +33,46 @@ export default function ItineraryPage() {
   }, []);
 
   useEffect(() => {
-    if (!token) return;
+    if (loading === false) return; // already fetched
 
-    fetch(`${API}/api/v1/itineraries/${id}`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-      .then(async (res) => {
-        if (!res.ok) {
-          const data = await res.json();
-          setError(data.message ?? "Erreur lors du chargement.");
-          return;
-        }
-        const data = await res.json();
-        setItinerary(data);
+    if (token) {
+      // Authenticated — fetch private itinerary with full details
+      fetch(`${API}/api/v1/itineraries/${id}`, {
+        headers: { Authorization: `Bearer ${token}` }
       })
-      .catch(() => setError("Impossible de joindre le serveur."))
-      .finally(() => setLoading(false));
+        .then(async (res) => {
+          if (!res.ok) {
+            // Fallback to public endpoint on auth failure
+            return fetch(`${API}/api/v1/itineraries/public/${id}`);
+          }
+          return res;
+        })
+        .then(async (res) => {
+          if (!res.ok) {
+            const data = await res.json();
+            setError(data.message ?? "Erreur lors du chargement.");
+            return;
+          }
+          const data = await res.json();
+          setItinerary(data);
+        })
+        .catch(() => setError("Impossible de joindre le serveur."))
+        .finally(() => setLoading(false));
+    } else {
+      // Not logged in — use public (read-only) endpoint
+      fetch(`${API}/api/v1/itineraries/public/${id}`)
+        .then(async (res) => {
+          if (!res.ok) {
+            const data = await res.json();
+            setError(data.message ?? "Itinéraire introuvable.");
+            return;
+          }
+          const data = await res.json();
+          setItinerary(data);
+        })
+        .catch(() => setError("Impossible de joindre le serveur."))
+        .finally(() => setLoading(false));
+    }
   }, [id, token]);
 
   async function handleValidate() {

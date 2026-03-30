@@ -107,7 +107,7 @@ export default function TravelerRegisterPage() {
                 <Link href="/experiences" className="rounded-full bg-atlas px-4 py-2 text-xs font-semibold text-white">
                   Explorer les experiences
                 </Link>
-                <Link href="/bookings/status" className="rounded-full border border-atlas px-4 py-2 text-xs font-semibold text-atlas">
+                <Link href="/bookings" className="rounded-full border border-atlas px-4 py-2 text-xs font-semibold text-atlas">
                   Mes reservations
                 </Link>
               </div>

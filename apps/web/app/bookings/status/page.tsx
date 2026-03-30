@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 type LookupState = "idle" | "loading" | "success" | "error";
 
@@ -20,17 +21,24 @@ type BookingResponse = {
 
 export default function BookingStatusPage() {
   const apiBase = useMemo(() => process.env.NEXT_PUBLIC_API_BASE_URL ?? apiBaseDefault, []);
+  const searchParams = useSearchParams();
   const [state, setState] = useState<LookupState>("idle");
   const [message, setMessage] = useState("");
   const [token, setToken] = useState("");
   const [booking, setBooking] = useState<BookingResponse | null>(null);
+  const [bookingIdInput, setBookingIdInput] = useState("");
 
   useEffect(() => {
     const stored = localStorage.getItem(travelerTokenKey) ?? "";
     if (stored) {
       setToken(stored);
     }
-  }, []);
+
+    const fromQuery = searchParams.get("bookingId")?.trim() ?? "";
+    if (fromQuery) {
+      setBookingIdInput(fromQuery);
+    }
+  }, [searchParams]);
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -39,7 +47,7 @@ export default function BookingStatusPage() {
     setBooking(null);
 
     const form = new FormData(event.currentTarget);
-    const bookingId = String(form.get("bookingId") ?? "").trim();
+    const bookingId = (String(form.get("bookingId") ?? "").trim() || bookingIdInput.trim());
     const accessToken = token.trim();
 
     if (!bookingId) {
@@ -111,8 +119,10 @@ export default function BookingStatusPage() {
               <input
                 id="bookingId"
                 name="bookingId"
-                required
+                required={!bookingIdInput}
                 placeholder="uuid..."
+                value={bookingIdInput}
+                onChange={(event) => setBookingIdInput(event.target.value)}
                 className="rounded-xl border border-slate-300 p-3 text-sm font-mono focus:border-atlas focus:outline-none"
               />
             </div>

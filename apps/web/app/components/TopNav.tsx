@@ -11,7 +11,7 @@ const navLinks = [
   { href: "/group-trips", label: "Voyages de groupe" },
   { href: "/itineraries/new", label: "Mon itineraire" },
   { href: "/special-request", label: "Demande speciale" },
-  { href: "/bookings/status", label: "Mes reservations" }
+  { href: "/bookings", label: "Mes reservations" }
 ];
 
 export default function TopNav() {

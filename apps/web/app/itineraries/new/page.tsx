@@ -96,18 +96,6 @@ export default function NewItineraryPage() {
         <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-5">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Token JWT (auto-rempli si connecté)
-            </label>
-            <input
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-              placeholder="eyJ..."
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-amber-400"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
               Titre de l&apos;itinéraire <span className="text-red-500">*</span>
             </label>
             <input

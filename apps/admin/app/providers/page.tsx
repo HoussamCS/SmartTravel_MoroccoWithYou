@@ -1,5 +1,5 @@
 import { fetchProviders } from "../../lib/api";
-import { createProviderAction, deleteProviderAction, updateProviderAction } from "./actions";
+import { createProviderAction, deleteProviderAction, updateProviderAction, uploadProviderPhotoAction } from "./actions";
 
 const categories = ["RESTAURANT", "ACTIVITY", "TRANSPORT", "ACCOM", "EXCURSION"];
 
@@ -64,6 +64,27 @@ export default async function ProvidersPage() {
                   Supprimer
                 </button>
               </form>
+
+              <form action={uploadProviderPhotoAction} className="grid-form compact" encType="multipart/form-data">
+                <input type="hidden" name="id" defaultValue={provider.id} />
+                <input type="hidden" name="existingPhotos" defaultValue={JSON.stringify(provider.photos ?? [])} />
+                <input name="photo" type="file" accept="image/png,image/jpeg,image/webp,image/gif" required />
+                <button type="submit">Uploader une photo</button>
+              </form>
+
+              {(provider.photos ?? []).length > 0 ? (
+                <div style={{ marginTop: 10, display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))" }}>
+                  {(provider.photos ?? []).map((photo, index) => (
+                    <a key={`${provider.id}-photo-${index}`} href={photo} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
+                      <img
+                        src={photo}
+                        alt={`${provider.name} photo ${index + 1}`}
+                        style={{ width: "100%", height: 90, objectFit: "cover", borderRadius: 8, border: "1px solid #d8deee" }}
+                      />
+                    </a>
+                  ))}
+                </div>
+              ) : null}
             </article>
           ))}
         </div>

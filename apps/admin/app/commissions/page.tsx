@@ -25,6 +25,12 @@ export default async function CommissionsPage() {
           <input name="providerId" placeholder="Provider UUID (optionnel)" />
           <button type="submit">Programmer prochain mois</button>
         </form>
+
+        <form action="/commissions/export" method="get" className="grid-form compact">
+          <input name="month" defaultValue={monthDefault} placeholder="YYYY-MM" />
+          <input name="providerId" placeholder="Provider UUID (optionnel)" />
+          <button type="submit">Exporter CSV</button>
+        </form>
       </section>
 
       <section className="admin-card">

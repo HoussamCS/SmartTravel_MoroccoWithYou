@@ -9,6 +9,7 @@ export type ProviderItem = {
   category: ProviderCategory;
   description: string;
   location: { lat: number; lng: number };
+  photos: string[];
   isActive: boolean;
 };
 
@@ -37,6 +38,18 @@ export type EventRequestRow = {
   requesterName?: string | null;
   requesterMail?: string | null;
   createdAt: string;
+};
+
+export type AdminGroupTripRow = {
+  id: string;
+  title: string;
+  destination: string;
+  startDate: string;
+  endDate: string;
+  maxCapacity: number;
+  pricePerPerson: number;
+  seatsRemaining: number;
+  program: unknown;
 };
 
 export const fetchProviders = async (): Promise<ProviderItem[]> => {
@@ -101,4 +114,17 @@ export const fetchEventRequests = async (): Promise<EventRequestRow[]> => {
   }
 
   return (await response.json()) as EventRequestRow[];
+};
+
+export const fetchAdminGroupTrips = async (): Promise<AdminGroupTripRow[]> => {
+  const response = await fetch(`${ADMIN_API_BASE}/admin/group-trips`, {
+    cache: "no-store",
+    headers: getHeaders()
+  });
+
+  if (!response.ok) {
+    return [];
+  }
+
+  return (await response.json()) as AdminGroupTripRow[];
 };

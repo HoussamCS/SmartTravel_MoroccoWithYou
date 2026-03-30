@@ -67,3 +67,59 @@ export const deleteProviderAction = async (formData: FormData) => {
 
   revalidatePath("/providers");
 };
+
+export const uploadProviderPhotoAction = async (formData: FormData) => {
+  const id = String(formData.get("id") ?? "").trim();
+  const existingPhotosRaw = String(formData.get("existingPhotos") ?? "[]");
+  const photoFile = formData.get("photo");
+
+  if (!(photoFile instanceof File) || photoFile.size === 0) {
+    revalidatePath("/providers");
+    return;
+  }
+
+  const uploadForm = new FormData();
+  uploadForm.append("file", photoFile, photoFile.name);
+
+  const uploadResponse = await fetch(`${ADMIN_API_BASE}/admin/uploads`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${getAdminToken()}`
+    },
+    body: uploadForm
+  });
+
+  if (!uploadResponse.ok) {
+    revalidatePath("/providers");
+    return;
+  }
+
+  const uploadPayload = (await uploadResponse.json()) as { url?: string };
+  if (!uploadPayload.url) {
+    revalidatePath("/providers");
+    return;
+  }
+
+  let existingPhotos: string[] = [];
+  try {
+    const parsed = JSON.parse(existingPhotosRaw) as unknown;
+    if (Array.isArray(parsed)) {
+      existingPhotos = parsed.filter((entry): entry is string => typeof entry === "string");
+    }
+  } catch {
+    existingPhotos = [];
+  }
+
+  const nextPhotos = [...existingPhotos, uploadPayload.url];
+
+  await fetch(`${ADMIN_API_BASE}/admin/providers/${id}/photos`, {
+    method: "PUT",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${getAdminToken()}`
+    },
+    body: JSON.stringify({ photos: nextPhotos })
+  });
+
+  revalidatePath("/providers");
+};
