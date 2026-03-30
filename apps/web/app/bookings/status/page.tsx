@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 type LookupState = "idle" | "loading" | "success" | "error";
@@ -19,7 +19,7 @@ type BookingResponse = {
   paymentIntent?: string | null;
 };
 
-export default function BookingStatusPage() {
+function BookingStatusContent() {
   const apiBase = useMemo(() => process.env.NEXT_PUBLIC_API_BASE_URL ?? apiBaseDefault, []);
   const searchParams = useSearchParams();
   const [state, setState] = useState<LookupState>("idle");
@@ -189,5 +189,13 @@ export default function BookingStatusPage() {
         </section>
       </section>
     </main>
+  );
+}
+
+export default function BookingStatusPage() {
+  return (
+    <Suspense fallback={<main className="mx-auto max-w-5xl px-4 py-8 md:px-8 md:py-12"><p className="text-sm text-slate-600">Chargement...</p></main>}>
+      <BookingStatusContent />
+    </Suspense>
   );
 }
