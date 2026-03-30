@@ -120,7 +120,7 @@ export default function BookingStatusPage() {
                 id="bookingId"
                 name="bookingId"
                 required={!bookingIdInput}
-                placeholder="uuid..."
+                placeholder="booking id"
                 value={bookingIdInput}
                 onChange={(event) => setBookingIdInput(event.target.value)}
                 className="rounded-xl border border-slate-300 p-3 text-sm font-mono focus:border-atlas focus:outline-none"
