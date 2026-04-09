@@ -28,6 +28,7 @@ export const appEnvSchema = z.object({
   ALLOWED_ORIGINS: z.string().min(1),
   RESEND_API_KEY: z.string().min(1).optional(),
   ADMIN_REPORT_EMAIL: z.string().email().optional(),
+  PROVIDER_REPORT_RECIPIENTS: z.string().optional(),
   R2_ENDPOINT: z.string().url().optional(),
   R2_ACCESS_KEY_ID: z.string().optional(),
   R2_SECRET_ACCESS_KEY: z.string().optional(),

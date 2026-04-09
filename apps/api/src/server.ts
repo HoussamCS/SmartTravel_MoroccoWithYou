@@ -192,6 +192,24 @@ await app.register(fastifyRawBody, {
 });
 await app.register(multipart, { limits: { fileSize: 10 * 1024 * 1024 } });
 
+app.setErrorHandler((error, request, reply) => {
+  if (error instanceof Prisma.PrismaClientInitializationError) {
+    request.log.error(error, "Database unavailable");
+    return reply.code(503).send({
+      message: "Database is unavailable. Start PostgreSQL and retry."
+    });
+  }
+
+  const statusCode = (error as { statusCode?: number }).statusCode ?? 500;
+  if (statusCode >= 500) {
+    request.log.error(error);
+    return reply.code(statusCode).send({ message: "Internal server error" });
+  }
+
+  const safeMessage = error instanceof Error ? error.message : "Request failed";
+  return reply.code(statusCode).send({ message: safeMessage });
+});
+
 app.get("/api/health", async () => ({ ok: true, service: "smarttravel-api" }));
 
 app.post("/api/v1/auth/register", async (request, reply) => {
@@ -1686,26 +1704,34 @@ app.delete("/api/v1/admin/services/:id", async (request, reply) => {
   }
 });
 
-try {
-  await commissionReportQueue.add(
-    "monthly-commission-report",
-    {
-      month: "AUTO"
-    },
-    {
-      jobId: "monthly-commission-report-auto",
-      repeat: {
-        pattern: "5 0 1 * *"
-      }
-    }
-  );
-} catch (error) {
-  app.log.warn({ err: error }, "Failed to ensure monthly commission auto scheduler");
-}
+const ensureMonthlyCommissionAutoScheduler = async (): Promise<void> => {
+  try {
+    await Promise.race([
+      commissionReportQueue.add(
+        "monthly-commission-report",
+        {
+          month: "AUTO"
+        },
+        {
+          jobId: "monthly-commission-report-auto",
+          repeat: {
+            pattern: "5 0 1 * *"
+          }
+        }
+      ),
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("Redis scheduler bootstrap timeout")), 2000);
+      })
+    ]);
+  } catch (error) {
+    app.log.warn({ err: error }, "Failed to ensure monthly commission auto scheduler");
+  }
+};
 
 const start = async () => {
   try {
     await app.listen({ port: 4000, host: "0.0.0.0" });
+    void ensureMonthlyCommissionAutoScheduler();
   } catch (error) {
     app.log.error(error);
     await prisma.$disconnect();

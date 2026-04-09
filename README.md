@@ -1,4 +1,4 @@
-# Morocco With You - Smart Travel Platform
+#é Morocco With You - Smart Travel Platform
 
 Monorepo Turborepo pour la plateforme SmartTravel.
 

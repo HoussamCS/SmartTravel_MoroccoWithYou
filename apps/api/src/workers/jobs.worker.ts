@@ -16,6 +16,31 @@ const resendApiKey = process.env.RESEND_API_KEY?.trim();
 const resendFrom = process.env.RESEND_FROM_EMAIL?.trim() ?? "Morocco With You <noreply@moroccowithyou.ma>";
 const resend = resendApiKey ? new Resend(resendApiKey) : null;
 const adminReportEmail = process.env.ADMIN_REPORT_EMAIL?.trim();
+const providerReportRecipientsRaw = process.env.PROVIDER_REPORT_RECIPIENTS?.trim();
+
+const providerReportRecipients = (() => {
+  if (!providerReportRecipientsRaw) {
+    return {} as Record<string, string>;
+  }
+
+  try {
+    const parsed = JSON.parse(providerReportRecipientsRaw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      console.warn("[worker] PROVIDER_REPORT_RECIPIENTS must be a JSON object map");
+      return {} as Record<string, string>;
+    }
+
+    return Object.entries(parsed).reduce<Record<string, string>>((acc, [providerId, email]) => {
+      if (typeof email === "string" && email.trim()) {
+        acc[providerId] = email.trim();
+      }
+      return acc;
+    }, {});
+  } catch {
+    console.warn("[worker] Failed to parse PROVIDER_REPORT_RECIPIENTS, falling back to ADMIN_REPORT_EMAIL");
+    return {} as Record<string, string>;
+  }
+})();
 
 const normalizeMonth = (month: string): string => {
   if (month !== "AUTO") {
@@ -229,11 +254,14 @@ const commissionWorker = new Worker<CommissionReportJob, void, CommissionReportJ
     const providerScope = job.data.providerId ?? "ALL";
     const csvContent = buildCommissionCsv(month, providerScope, flattenedRows, totalCommission);
     const pdfBuffer = await buildCommissionPdf(month, providerScope, flattenedRows, totalCommission);
+    const reportRecipient = job.data.providerId
+      ? providerReportRecipients[job.data.providerId] ?? adminReportEmail
+      : adminReportEmail;
 
-    if (resend && adminReportEmail) {
+    if (resend && reportRecipient) {
       await resend.emails.send({
         from: resendFrom,
-        to: adminReportEmail,
+        to: reportRecipient,
         subject: `Rapport commissions ${month} (${providerScope})`,
         text: [
           `Rapport commissions pour ${month}`,
@@ -268,7 +296,7 @@ const commissionWorker = new Worker<CommissionReportJob, void, CommissionReportJ
           bookings: bookings.length,
           totalCommission,
           month,
-          emailedTo: adminReportEmail ?? null,
+          emailedTo: reportRecipient ?? null,
           attachments: [
             `commission-report-${month}-${providerScope}.csv`,
             `commission-report-${month}-${providerScope}.pdf`
