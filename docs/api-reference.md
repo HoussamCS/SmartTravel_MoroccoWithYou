@@ -28,7 +28,7 @@ Base URL: `/api/v1`
 - `GET /bookings`: list traveler bookings (owner-scoped unless admin)
 - `GET /bookings/:id`: get booking status
 
-## Itineraries
+## Itineraries 
 
 - `POST /itineraries`: submit intake form and initialize draft itinerary
 - `GET /itineraries/:id`: read itinerary status and days
@@ -36,7 +36,7 @@ Base URL: `/api/v1`
 
 ## Group Trips
 
-- `GET /group-trips`: list group trips + seats remaining
+- `GET /group-trips`: list group trips ++ seats remaining
 - `POST /group-trips/:id/join`: join a trip with `pax`
 
 ## Admin
