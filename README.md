@@ -1,6 +1,5 @@
 #é Morocco With You - Smart Travel Platform
-
-Monorepo Turborepo pour la plateforme SmartTravel.
+<!-- Minor change 1 -->Monorepo Turborepo pour la plateforme SmartTravel.
 
 ## Structure
 
