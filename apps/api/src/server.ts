@@ -1,3 +1,4 @@
+// Minor change 6
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
