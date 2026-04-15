@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+// Minor change 2
 const features = [
   {
     title: "Experiences locales",
