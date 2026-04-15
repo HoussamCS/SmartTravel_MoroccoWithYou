@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+// Minor change 3
 const cards = [
   { title: "Prestataires", metric: "CRUD", hint: "gestion catalogue", href: "/providers" },
   { title: "Itinéraires", metric: "Builder", hint: "planification voyages sur mesure", href: "/itineraries" },
