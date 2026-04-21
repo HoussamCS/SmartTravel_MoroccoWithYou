@@ -1,5 +1,9 @@
 # API Reference (MVP)
 
+## Note: This is the MVP API reference.
+
+## Note: This is the MVP API reference.
+
 Base URL: `/api/v1`
 
 ## Auth
