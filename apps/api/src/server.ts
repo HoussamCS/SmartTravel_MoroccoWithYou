@@ -17,6 +17,7 @@ import { deleteByPattern, getJsonCache, setJsonCache } from "./cache/redis.js";
 import { bookingEmailQueue, commissionReportQueue } from "./jobs/queues.js";
 import { uploadToR2 } from "./lib/s3.js";
 
+// Server setup
 const env = appEnvSchema.parse(process.env);
 
 const app = Fastify({ logger: true });
