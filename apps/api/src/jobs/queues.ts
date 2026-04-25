@@ -15,6 +15,7 @@ const redisConnection = {
 export const BOOKING_EMAIL_QUEUE = "booking-email";
 export const COMMISSION_REPORT_QUEUE = "commission-report";
 
+// Job types
 export type BookingEmailJob = {
   bookingId: string;
   userId: string;
