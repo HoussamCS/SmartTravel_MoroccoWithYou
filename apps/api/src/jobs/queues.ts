@@ -31,6 +31,7 @@ export type CommissionReportJob = {
 
 export type CommissionReportJobName = "monthly-commission-report";
 
+// Queue instances
 export const bookingEmailQueue = new Queue<BookingEmailJob, void, BookingEmailJobName>(BOOKING_EMAIL_QUEUE, {
   connection: redisConnection
 });
