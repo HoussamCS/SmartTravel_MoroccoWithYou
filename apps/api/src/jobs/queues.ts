@@ -11,6 +11,7 @@ const redisConnection = {
   enableOfflineQueue: false,
 };
 
+// Queue names
 export const BOOKING_EMAIL_QUEUE = "booking-email";
 export const COMMISSION_REPORT_QUEUE = "commission-report";
 
