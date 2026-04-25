@@ -50,4 +50,5 @@ commissionReportQueue.on("error", (err) => {
   console.warn("[BullMQ] commissionReportQueue error (non-fatal):", err.message);
 });
 
+// Export connection for reuse
 export { redisConnection };
